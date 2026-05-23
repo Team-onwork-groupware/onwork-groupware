@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { api } from '../lib/api'
 
 const NAV = [
   { to: '/dashboard', label: '홈' },
@@ -13,6 +14,13 @@ const NAV = [
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [unread, setUnread] = useState(0)
+
+  useEffect(() => {
+    api.get<{ unread: number }>('/notifications/unread-count')
+      .then((r) => setUnread(r.data.unread))
+      .catch(() => setUnread(0))
+  }, [])
 
   async function onLogout() {
     await logout()
@@ -38,6 +46,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <div className="topbar-spacer" />
+          <span className="bell" data-testid="notif-bell" title="알림">
+            🔔{unread > 0 && <span className="bell-badge">{unread}</span>}
+          </span>
           <div className="topbar-user" data-testid="topbar-user">
             <span className="user-name">{user?.name ?? '사용자'}</span>
             <span className="user-role">{user?.position ?? user?.role}</span>

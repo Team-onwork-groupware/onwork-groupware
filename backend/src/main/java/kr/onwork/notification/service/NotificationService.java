@@ -1,6 +1,10 @@
 package kr.onwork.notification.service;
 
+import java.util.List;
+import kr.onwork.common.error.BusinessException;
+import kr.onwork.common.error.ErrorCode;
 import kr.onwork.notification.domain.Notification;
+import kr.onwork.notification.dto.NotificationResponse;
 import kr.onwork.notification.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,5 +30,31 @@ public class NotificationService {
     @Transactional
     public void notify(Long userId, String type, String refType, Long refId, String message) {
         repository.save(Notification.create(userId, type, refType, refId, message));
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> list(Long userId) {
+        return repository.findByUserIdOrderByIdDesc(userId).stream()
+                .map(NotificationResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long unreadCount(Long userId) {
+        return repository.countByUserIdAndIsReadFalse(userId);
+    }
+
+    @Transactional
+    public void markRead(Long userId, Long id) {
+        Notification n = repository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!n.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        n.markRead();
+    }
+
+    @Transactional
+    public void markAllRead(Long userId) {
+        repository.findByUserIdAndIsReadFalseOrderByIdDesc(userId).forEach(Notification::markRead);
     }
 }
