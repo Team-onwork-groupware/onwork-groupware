@@ -12,15 +12,74 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  backend:
+    name: Backend (test + ArchUnit)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: onwork
+          POSTGRES_USER: onwork
+          POSTGRES_PASSWORD: onwork
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U onwork -d onwork"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Apply schema & seed
+        env:
+          PGPASSWORD: onwork
+        run: |
+          psql -h localhost -U onwork -d onwork -f db/schema.sql
+          psql -h localhost -U onwork -d onwork -f db/seed.sql
+
+      - name: Run tests
+        working-directory: backend
+        run: ./gradlew test --no-daemon
+
+  frontend:
+    name: Frontend (build)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check required agent files
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install & build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  governance:
+    name: Governance files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required agent/governance files
         run: |
           test -f AGENTS.md
           test -f plan.md
           test -f memory-bank/activeContext.md
-          test -f workflows/verify-before-commit.md
+          test -f db/schema.sql
