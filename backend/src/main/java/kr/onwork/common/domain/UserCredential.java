@@ -31,4 +31,15 @@ public class UserCredential {
 
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime updatedAt;
+
+    public static UserCredential create(Long userId, String passwordHash) {
+        UserCredential c = new UserCredential();
+        c.userId = userId;
+        c.passwordHash = passwordHash;
+        return c;
+    }
+
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
 }

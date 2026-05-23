@@ -75,4 +75,45 @@ public class User {
     public boolean isActive() {
         return status == UserStatus.ACTIVE;
     }
+
+    public boolean isResigned() {
+        return status == UserStatus.RESIGNED;
+    }
+
+    /** 신규 입사자 생성 (UC-HR-01 승인 시점). */
+    public static User createForHire(Department department, WorkGroup workGroup, String employeeNo,
+                                     String name, String email, Role role, String position,
+                                     LocalDate hireDate) {
+        User u = new User();
+        u.department = department;
+        u.workGroup = workGroup;
+        u.employeeNo = employeeNo;
+        u.name = name;
+        u.email = email;
+        u.role = role != null ? role : Role.EMPLOYEE;
+        u.position = position;
+        u.status = UserStatus.ACTIVE;
+        u.hireDate = hireDate;
+        return u;
+    }
+
+    /** 인사정보 변경 (UC-HR-02 UPDATE 승인 시점). null이 아닌 필드만 반영. */
+    public void applyUpdate(Department department, String position, Role role) {
+        if (department != null) {
+            this.department = department;
+        }
+        if (position != null) {
+            this.position = position;
+        }
+        if (role != null) {
+            this.role = role;
+        }
+    }
+
+    /** 퇴사 처리 (UC-HR-03 승인 시점) — soft delete. */
+    public void resign(LocalDate resignDate, String resignReason) {
+        this.status = UserStatus.RESIGNED;
+        this.resignDate = resignDate;
+        this.resignReason = resignReason;
+    }
 }

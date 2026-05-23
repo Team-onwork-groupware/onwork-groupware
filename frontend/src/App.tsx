@@ -3,6 +3,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import HrPage from './pages/HrPage'
 
 // 모듈 화면 플레이스홀더 (Phase 2~4에서 구현)
 function ModulePlaceholder({ title }: { title: string }) {
@@ -31,7 +32,7 @@ export default function App() {
         path="/hr"
         element={
           <ProtectedRoute>
-            <ModulePlaceholder title="인사관리" />
+            <HrPage />
           </ProtectedRoute>
         }
       />
