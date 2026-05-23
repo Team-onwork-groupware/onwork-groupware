@@ -1,0 +1,10 @@
+---
+description: Agent-driven development workflow rules
+alwaysApply: true
+---
+
+# DevAuto Workflow
+
+Before editing code, read `AGENTS.md`, `plan.md`, and `memory-bank/activeContext.md`.
+
+Keep implementation inside the planned scope, add or update tests for behavior changes, run verification commands, and update `memory-bank/progress.md` when work is complete.

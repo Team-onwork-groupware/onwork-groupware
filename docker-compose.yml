@@ -1,0 +1,42 @@
+# OnWork 로컬 개발 인프라 — PostgreSQL(주 DB) + Redis(세션·토큰 블랙리스트·캐시)
+# 사용: docker compose up -d
+# 비밀번호는 로컬 개발용 기본값. 운영에서는 환경변수/시크릿으로 주입할 것.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: onwork-postgres
+    environment:
+      POSTGRES_DB: onwork
+      POSTGRES_USER: onwork
+      POSTGRES_PASSWORD: onwork
+      TZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - onwork-pgdata:/var/lib/postgresql/data
+      # 최초 기동 시 스키마 자동 적용 (빈 볼륨일 때만 실행됨)
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onwork -d onwork"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: onwork-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - onwork-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  onwork-pgdata:
+  onwork-redisdata:

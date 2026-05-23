@@ -1,0 +1,21 @@
+openapi: 3.0.0
+info:
+  title: OnWork API
+  version: 0.1.0
+  description: 초안. requirement-analyzer 또는 사용자가 채운다.
+
+servers:
+  - url: http://localhost:8000
+    description: 로컬 개발
+
+paths:
+  /health:
+    get:
+      summary: 헬스 체크
+      responses:
+        '200':
+          description: OK
+  # 추가 엔드포인트는 user-stories에서 도출한다.
+
+components:
+  schemas: {}

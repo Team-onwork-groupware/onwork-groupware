@@ -1,0 +1,25 @@
+# OS / 에디터
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Java / Gradle
+backend/.gradle/
+backend/build/
+*.class
+*.log
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# 환경/시크릿
+.env
+.env.local
+*.local
+
+# Python 캐시 (거버넌스 tools)
+__pycache__/
+*.pyc
