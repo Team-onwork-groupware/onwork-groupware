@@ -1,23 +1,57 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import './App.css'
+import ProtectedRoute from './components/ProtectedRoute'
+import AppLayout from './components/AppLayout'
+import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
 
-// Phase 0 셸 — 라우트 골격만. Phase 1~5에서 로그인/대시보드/인사/근태/휴가 화면이 채워진다.
-function Placeholder({ title }: { title: string }) {
+// 모듈 화면 플레이스홀더 (Phase 2~4에서 구현)
+function ModulePlaceholder({ title }: { title: string }) {
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
-      <h1 style={{ fontSize: '1.4rem' }}>OnWork — {title}</h1>
-      <p style={{ color: '#6B7280' }}>Phase 0 스켈레톤. 이후 단계에서 구현됩니다.</p>
-    </main>
+    <AppLayout>
+      <h1 className="page-title">{title}</h1>
+      <div className="placeholder-card">이 모듈은 이후 단계에서 구현됩니다.</div>
+    </AppLayout>
   )
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Placeholder title="로그인" />} />
-      <Route path="/dashboard" element={<Placeholder title="대시보드" />} />
-      <Route path="*" element={<Placeholder title="404" />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hr"
+        element={
+          <ProtectedRoute>
+            <ModulePlaceholder title="인사관리" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/attendance"
+        element={
+          <ProtectedRoute>
+            <ModulePlaceholder title="근태관리" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leave"
+        element={
+          <ProtectedRoute>
+            <ModulePlaceholder title="휴가관리" />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
 }
