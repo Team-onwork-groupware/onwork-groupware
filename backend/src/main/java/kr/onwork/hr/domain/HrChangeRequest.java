@@ -79,6 +79,42 @@ public class HrChangeRequest {
         return r;
     }
 
+    /** 임시저장(UC-HR-01 A1) — 알림 미발송, 본인 수정 가능. */
+    public static HrChangeRequest createDraft(ChangeType type, Long targetUserId,
+                                              Map<String, Object> payload, String reason, Long requestedBy) {
+        HrChangeRequest r = new HrChangeRequest();
+        r.changeType = type;
+        r.targetUserId = targetUserId;
+        r.payload = payload;
+        r.reason = reason;
+        r.requestedBy = requestedBy;
+        r.status = RequestStatus.DRAFT;
+        return r;
+    }
+
+    /** DRAFT 본문 갱신 (이어서 작성, UC-HR-01 A1 5c). */
+    public void updateDraft(ChangeType type, Long targetUserId, Map<String, Object> payload, String reason) {
+        if (status != RequestStatus.DRAFT) {
+            throw new IllegalStateException("DRAFT 상태에서만 수정 가능합니다");
+        }
+        this.changeType = type;
+        this.targetUserId = targetUserId;
+        this.payload = payload;
+        this.reason = reason;
+    }
+
+    /** DRAFT → PENDING 승인 요청(알림 발송 대상이 됨). */
+    public void submit() {
+        if (status != RequestStatus.DRAFT) {
+            throw new IllegalStateException("DRAFT 상태에서만 승인 요청 가능합니다");
+        }
+        this.status = RequestStatus.PENDING;
+    }
+
+    public boolean isDraft() {
+        return status == RequestStatus.DRAFT;
+    }
+
     public boolean isPending() {
         return status == RequestStatus.PENDING;
     }

@@ -8,11 +8,13 @@ import kr.onwork.common.security.SecurityUtil;
 import kr.onwork.hr.domain.RequestStatus;
 import kr.onwork.hr.dto.ChangeRequestResponse;
 import kr.onwork.hr.dto.CreateChangeRequestRequest;
+import kr.onwork.hr.dto.DepartmentResponse;
 import kr.onwork.hr.dto.EmployeeResponse;
 import kr.onwork.hr.dto.ProcessRequest;
 import kr.onwork.hr.service.HrService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,5 +74,56 @@ public class HrController {
     @PatchMapping("/change-requests/{id}/process")
     public ChangeRequestResponse process(@PathVariable Long id, @Valid @RequestBody ProcessRequest req) {
         return hrService.process(SecurityUtil.currentPrincipal(), id, req);
+    }
+
+    // ---------- 임시저장 (UC-HR-01 A1) ----------
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @PostMapping("/change-requests/draft")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChangeRequestResponse createDraft(@Valid @RequestBody CreateChangeRequestRequest req) {
+        return hrService.createDraft(SecurityUtil.currentPrincipal(), req);
+    }
+
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @PatchMapping("/change-requests/{id}/draft")
+    public ChangeRequestResponse updateDraft(@PathVariable Long id,
+                                             @Valid @RequestBody CreateChangeRequestRequest req) {
+        return hrService.updateDraft(SecurityUtil.currentPrincipal(), id, req);
+    }
+
+    /** DRAFT → PENDING 승인 요청. */
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @PostMapping("/change-requests/{id}/submit")
+    public ChangeRequestResponse submitDraft(@PathVariable Long id) {
+        return hrService.submitDraft(SecurityUtil.currentPrincipal(), id);
+    }
+
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @DeleteMapping("/change-requests/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDraft(@PathVariable Long id) {
+        hrService.deleteDraft(SecurityUtil.currentPrincipal(), id);
+    }
+
+    /** 내 임시저장 목록 (HR_MANAGER 본인). */
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @GetMapping("/change-requests/my-drafts")
+    public Map<String, Object> listMyDrafts() {
+        List<ChangeRequestResponse> items = hrService.listMyDrafts(SecurityUtil.currentPrincipal());
+        return Map.of("total", items.size(), "items", items);
+    }
+
+    /** 폼 초기화 시 자동 채번된 임시 사번 (UC-HR-01 정상 흐름 2단계). */
+    @PreAuthorize("hasRole('HR_MANAGER')")
+    @GetMapping("/change-requests/next-employee-no")
+    public Map<String, String> suggestEmployeeNo() {
+        return Map.of("employeeNo", hrService.suggestNextEmployeeNo());
+    }
+
+    /** 부서 드롭다운(미분류 옵션은 프론트가 추가). */
+    @GetMapping("/departments")
+    public Map<String, Object> listDepartments() {
+        List<DepartmentResponse> items = hrService.listDepartments();
+        return Map.of("items", items);
     }
 }

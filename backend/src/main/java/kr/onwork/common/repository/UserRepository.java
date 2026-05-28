@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail(String email);
 
+    boolean existsByEmployeeNo(String employeeNo);   // UC-HR-01 E1: 사번 중복 자동 재채번
+
     /** 결재 알림 대상(경영진 등) 조회. */
     List<User> findByRoleInAndStatus(Collection<Role> roles, UserStatus status);
 

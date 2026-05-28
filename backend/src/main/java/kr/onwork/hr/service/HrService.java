@@ -22,11 +22,14 @@ import kr.onwork.hr.domain.HrChangeRequest;
 import kr.onwork.hr.domain.RequestStatus;
 import kr.onwork.hr.dto.ChangeRequestResponse;
 import kr.onwork.hr.dto.CreateChangeRequestRequest;
+import kr.onwork.hr.dto.DepartmentResponse;
 import kr.onwork.hr.dto.EmployeeResponse;
 import kr.onwork.hr.dto.ProcessRequest;
 import kr.onwork.hr.repository.EmployeeChangeHistoryRepository;
 import kr.onwork.hr.repository.HrChangeRequestRepository;
 import kr.onwork.notification.service.NotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class HrService {
 
+    private static final Logger log = LoggerFactory.getLogger(HrService.class);
     private static final long DEFAULT_WORK_GROUP_ID = 1L;
 
     private final HrChangeRequestRepository changeRequestRepository;
@@ -67,7 +71,7 @@ public class HrService {
         this.notificationService = notificationService;
     }
 
-    // ---------------------------------------------------------------- 요청 등록
+    // ---------------------------------------------------------------- 요청 등록 (즉시 PENDING)
     @Transactional
     public ChangeRequestResponse createChangeRequest(AuthPrincipal principal, CreateChangeRequestRequest req) {
         validateCreatePayload(req);
@@ -79,9 +83,78 @@ public class HrService {
         return ChangeRequestResponse.from(saved);
     }
 
+    // ---------------------------------------------------------------- 임시저장 (UC-HR-01 A1)
+    @Transactional
+    public ChangeRequestResponse createDraft(AuthPrincipal principal, CreateChangeRequestRequest req) {
+        // 임시저장 시점엔 필수값 검증을 건너뜀 (작성 중일 수 있음). 알림 미발송.
+        HrChangeRequest saved = changeRequestRepository.save(HrChangeRequest.createDraft(
+                req.changeType(), req.targetUserId(), req.payload(), req.reason(), principal.userId()));
+        return ChangeRequestResponse.from(saved);
+    }
+
+    @Transactional
+    public ChangeRequestResponse updateDraft(AuthPrincipal principal, Long id, CreateChangeRequestRequest req) {
+        HrChangeRequest draft = ownDraft(principal, id);
+        draft.updateDraft(req.changeType(), req.targetUserId(), req.payload(), req.reason());
+        return ChangeRequestResponse.from(draft);
+    }
+
+    /** DRAFT → PENDING 전환 + 정식 검증 + 승인자 알림. */
+    @Transactional
+    public ChangeRequestResponse submitDraft(AuthPrincipal principal, Long id) {
+        HrChangeRequest draft = ownDraft(principal, id);
+        validateForSubmit(draft.getChangeType(), draft.getTargetUserId(), draft.getPayload());
+        draft.submit();
+        notifyApprovers(draft);
+        return ChangeRequestResponse.from(draft);
+    }
+
+    @Transactional
+    public void deleteDraft(AuthPrincipal principal, Long id) {
+        HrChangeRequest draft = ownDraft(principal, id);
+        changeRequestRepository.delete(draft);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChangeRequestResponse> listMyDrafts(AuthPrincipal principal) {
+        return changeRequestRepository
+                .findByRequestedByAndStatusOrderByIdDesc(principal.userId(), RequestStatus.DRAFT)
+                .stream().map(ChangeRequestResponse::from).toList();
+    }
+
+    /** UC-HR-01 정상 흐름 2단계: 자동 채번된 임시 사번을 폼에 미리 표시. */
+    @Transactional(readOnly = true)
+    public String suggestNextEmployeeNo() {
+        return generateEmployeeNo();
+    }
+
+    /** 입사 폼 부서 드롭다운(미분류 옵션은 프론트가 추가). */
+    @Transactional(readOnly = true)
+    public List<DepartmentResponse> listDepartments() {
+        return departmentRepository.findAll().stream()
+                .map(d -> new DepartmentResponse(d.getId(), d.getName()))
+                .toList();
+    }
+
+    private HrChangeRequest ownDraft(AuthPrincipal principal, Long id) {
+        HrChangeRequest draft = changeRequestRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!draft.getRequestedBy().equals(principal.userId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "본인의 임시저장만 처리 가능합니다");
+        }
+        if (!draft.isDraft()) {
+            throw new BusinessException(ErrorCode.ALREADY_PROCESSED, "임시저장 상태가 아닙니다");
+        }
+        return draft;
+    }
+
     private void validateCreatePayload(CreateChangeRequestRequest req) {
-        Map<String, Object> p = req.payload();
-        switch (req.changeType()) {
+        validateForSubmit(req.changeType(), req.targetUserId(), req.payload());
+    }
+
+    /** UC-HR-01 정상 흐름 4단계 검증 — DRAFT 승인 요청(submit) 시점에도 동일하게 적용. */
+    private void validateForSubmit(ChangeType type, Long targetUserId, Map<String, Object> p) {
+        switch (type) {
             case CREATE -> {
                 requireField(p, "name");
                 requireField(p, "email");
@@ -92,17 +165,17 @@ public class HrService {
                 }
             }
             case UPDATE -> {
-                if (req.targetUserId() == null) {
+                if (targetUserId == null) {
                     throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "target_user_id가 필요합니다");
                 }
-                userRepository.findById(req.targetUserId())
+                userRepository.findById(targetUserId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
             }
             case RESIGN -> {
-                if (req.targetUserId() == null) {
+                if (targetUserId == null) {
                     throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "target_user_id가 필요합니다");
                 }
-                User target = userRepository.findById(req.targetUserId())
+                User target = userRepository.findById(targetUserId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
                 if (target.isResigned()) {
                     throw new BusinessException(ErrorCode.ALREADY_PROCESSED, "이미 퇴사 처리된 직원입니다");
@@ -246,13 +319,19 @@ public class HrService {
     }
 
     // ---------------------------------------------------------------- helpers
+    /** 알림 발송 격리 — UC-HR-01 E4: 변경 요청 저장은 완료, 알림 실패 시 로깅(재시도 큐는 v2). */
     private void notifyApprovers(HrChangeRequest request) {
-        List<User> approvers = userRepository.findByRoleInAndStatus(
-                List.of(Role.CEO, Role.VP), UserStatus.ACTIVE);
-        for (User approver : approvers) {
-            notificationService.notify(approver.getId(), NotificationService.HR_CHANGE_REQUESTED,
-                    "HR", request.getId(),
-                    "새 인사 변경 요청(" + request.getChangeType().name() + ")이 승인 대기 중입니다");
+        try {
+            List<User> approvers = userRepository.findByRoleInAndStatus(
+                    List.of(Role.CEO, Role.VP), UserStatus.ACTIVE);
+            for (User approver : approvers) {
+                notificationService.notify(approver.getId(), NotificationService.HR_CHANGE_REQUESTED,
+                        "HR", request.getId(),
+                        "새 인사 변경 요청(" + request.getChangeType().name() + ")이 승인 대기 중입니다");
+            }
+        } catch (RuntimeException e) {
+            log.warn("[HR notify] 알림 발송 실패(저장은 완료): requestId={} reason={}",
+                    request.getId(), e.getMessage());
         }
     }
 
@@ -286,9 +365,15 @@ public class HrService {
         return id != null ? id : DEFAULT_WORK_GROUP_ID;
     }
 
+    /** UC-HR-01 E1: 자동 채번 + 중복 시 다음 가용 번호로 재채번. */
     private String generateEmployeeNo() {
+        int year = LocalDate.now().getYear();
         long seq = userRepository.count() + 1;
-        return "%d-%03d".formatted(LocalDate.now().getYear(), seq);
+        String candidate;
+        while (userRepository.existsByEmployeeNo(candidate = "%d-%03d".formatted(year, seq))) {
+            seq++;
+        }
+        return candidate;
     }
 
     private boolean isExecutive(Role role) {

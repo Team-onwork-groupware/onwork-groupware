@@ -14,6 +14,8 @@ public interface HrChangeRequestRepository extends JpaRepository<HrChangeRequest
 
     List<HrChangeRequest> findByRequestedByOrderByIdDesc(Long requestedBy);
 
+    List<HrChangeRequest> findByRequestedByAndStatusOrderByIdDesc(Long requestedBy, RequestStatus status);
+
     /** 결재 피로도 개선 #4: 장기 대기 결재 감지(에스컬레이션용). */
     List<HrChangeRequest> findByStatusAndCreatedAtBefore(RequestStatus status, LocalDateTime threshold);
 }

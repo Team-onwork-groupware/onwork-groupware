@@ -185,6 +185,20 @@ body {
 .small { font-size: 0.82rem; }
 .row-urgent { background: #fff7f7; }
 
+/* 신규 입사 폼 (UC-HR-01) */
+.hire-form { margin-top: 12px; padding: 16px; background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: 10px; }
+.hire-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 8px 0 16px; }
+.hire-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--color-text-muted); }
+.hire-grid input, .hire-grid select {
+  padding: 8px 10px; font: inherit; color: var(--color-text); background: #fff;
+  border: 1px solid var(--color-border); border-radius: 8px;
+}
+.hire-grid input:focus, .hire-grid select:focus { outline: 2px solid var(--color-primary); }
+.hire-grid input[readonly] { background: var(--color-bg); color: var(--color-text-muted); }
+.hire-grid input.invalid { border-color: var(--color-danger); background: #fff5f5; }
+.hire-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ---------- 카드/테이블 ---------- */
 .card-block {
   background: var(--color-surface);

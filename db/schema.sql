@@ -103,7 +103,7 @@ CREATE TABLE hr_change_requests (
     payload       JSONB        NOT NULL,                   -- 변경 내용
     reason        VARCHAR(500),
     status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING'
-                  CHECK (status IN ('PENDING','APPROVED','REJECTED','CANCELLED')),
+                  CHECK (status IN ('DRAFT','PENDING','APPROVED','REJECTED','CANCELLED')),
     requested_by  BIGINT       NOT NULL,                   -- 경영지원팀
     approver_id   BIGINT,
     reject_reason VARCHAR(500),                            -- REJECTED 시 필수(앱)
