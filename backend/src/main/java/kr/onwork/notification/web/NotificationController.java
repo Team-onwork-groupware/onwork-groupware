@@ -3,7 +3,9 @@ package kr.onwork.notification.web;
 import java.util.List;
 import java.util.Map;
 import kr.onwork.common.security.SecurityUtil;
+import kr.onwork.notification.dto.NotificationDigest;
 import kr.onwork.notification.dto.NotificationResponse;
+import kr.onwork.notification.service.NotificationDigestService;
 import kr.onwork.notification.service.NotificationService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -17,9 +19,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationDigestService digestService;
 
-    public NotificationController(NotificationService notificationService) {
+    public NotificationController(NotificationService notificationService,
+                                  NotificationDigestService digestService) {
         this.notificationService = notificationService;
+        this.digestService = digestService;
+    }
+
+    /** 결재 피로도 개선 #5: 1회 호출로 핵심 지표 + 최근 5건. */
+    @GetMapping("/digest")
+    public NotificationDigest digest() {
+        return digestService.digest(SecurityUtil.currentPrincipal());
     }
 
     @GetMapping

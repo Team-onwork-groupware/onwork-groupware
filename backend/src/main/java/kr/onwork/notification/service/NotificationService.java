@@ -20,6 +20,8 @@ public class NotificationService {
     public static final String LEAVE_REQUESTED = "LEAVE_REQUESTED";
     public static final String LEAVE_APPROVED = "LEAVE_APPROVED";
     public static final String LEAVE_ON_HOLD = "LEAVE_ON_HOLD";
+    public static final String LEAVE_AUTO_APPROVED = "LEAVE_AUTO_APPROVED";
+    public static final String APPROVAL_LONG_PENDING = "APPROVAL_LONG_PENDING";
 
     private final NotificationRepository repository;
 

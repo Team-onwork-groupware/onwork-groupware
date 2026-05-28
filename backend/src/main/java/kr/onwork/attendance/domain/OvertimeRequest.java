@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -50,6 +51,9 @@ public class OvertimeRequest {
 
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
+
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     public static OvertimeRequest create(Long userId, LocalDate requestDate,
                                          LocalDateTime start, LocalDateTime end, String reason) {

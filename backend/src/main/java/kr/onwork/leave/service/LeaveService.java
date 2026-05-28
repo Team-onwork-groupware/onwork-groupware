@@ -100,6 +100,19 @@ public class LeaveService {
         LeaveRequest saved = requestRepository.save(LeaveRequest.create(
                 principal.userId(), balance.getId(), req.startDate(), req.endDate(), daysUsed, req.reason()));
 
+        // 결재 피로도 개선 #1: 단기 휴가 자동 승인 (반차 / 1일 이하 ANNUAL + 3일 이상 여유)
+        if (isAutoApprovable(type, daysUsed, req.startDate())) {
+            BigDecimal before = balance.remaining();
+            balance.deduct(daysUsed);
+            historyRepository.save(LeaveHistory.of(balance.getId(), saved.getId(), LeaveChangeType.USE,
+                    daysUsed.negate(), before, balance.remaining(), principal.userId()));
+            saved.approve(null, false);   // approverId=null → 시스템 자동 승인
+            notificationService.notify(principal.userId(), NotificationService.LEAVE_AUTO_APPROVED,
+                    "LEAVE", saved.getId(),
+                    "휴가 신청이 자동 승인되었습니다 (단기 휴가 — 결재자 부담 완화)");
+            return LeaveRequestResponse.of(saved, nameOf(principal.userId()));
+        }
+
         // 결재자(대행 포함)에게 알림
         Long approverId = resolveActiveApprover(principal.userId());
         if (approverId != null) {
@@ -107,6 +120,19 @@ public class LeaveService {
                     "LEAVE", saved.getId(), "새 휴가 신청이 결재 대기 중입니다");
         }
         return LeaveRequestResponse.of(saved, nameOf(principal.userId()));
+    }
+
+    /** 자동 승인 조건: 반차(0.5일) 또는 1일 이하 연차 + 시작일 3일 이상 여유(긴급/당일 제외). 보상휴가 제외. */
+    private boolean isAutoApprovable(LeaveType type, BigDecimal daysUsed, LocalDate startDate) {
+        if (type.isComp()) {
+            return false;
+        }
+        if (type.isHalfDay()) {
+            return true;
+        }
+        boolean shortAnnual = daysUsed.compareTo(BigDecimal.ONE) <= 0;
+        boolean farEnough = !startDate.isBefore(LocalDate.now().plusDays(3));
+        return shortAnnual && farEnough;
     }
 
     // ---------------------------------------------------------------- 결재함 / 내 신청

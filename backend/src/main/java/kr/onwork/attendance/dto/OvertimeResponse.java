@@ -13,11 +13,12 @@ public record OvertimeResponse(
         String reason,
         String status,
         Long approverId,
-        String rejectReason
+        String rejectReason,
+        LocalDateTime createdAt
 ) {
     public static OvertimeResponse from(OvertimeRequest r) {
         return new OvertimeResponse(r.getId(), r.getUserId(), r.getRequestDate(),
                 r.getExpectedStartAt(), r.getExpectedEndAt(), r.getReason(),
-                r.getStatus().name(), r.getApproverId(), r.getRejectReason());
+                r.getStatus().name(), r.getApproverId(), r.getRejectReason(), r.getCreatedAt());
     }
 }

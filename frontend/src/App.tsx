@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage'
 import HrPage from './pages/HrPage'
 import AttendancePage from './pages/AttendancePage'
 import LeavePage from './pages/LeavePage'
+import ApprovalsPage from './pages/ApprovalsPage'
 
 export default function App() {
   return (
@@ -40,6 +41,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <LeavePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals"
+        element={
+          <ProtectedRoute>
+            <ApprovalsPage />
           </ProtectedRoute>
         }
       />

@@ -1,6 +1,7 @@
 package kr.onwork.leave.repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import kr.onwork.leave.domain.LeaveRequest;
 import kr.onwork.leave.domain.LeaveStatus;
@@ -24,4 +25,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     long countOverlapping(@Param("userId") Long userId,
                           @Param("start") LocalDate start,
                           @Param("end") LocalDate end);
+
+    /** 결재 피로도 개선 #4: 장기 대기 결재 감지(에스컬레이션용). */
+    List<LeaveRequest> findByStatusAndCreatedAtBefore(LeaveStatus status, LocalDateTime threshold);
 }

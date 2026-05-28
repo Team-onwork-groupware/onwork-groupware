@@ -168,6 +168,7 @@ CREATE TABLE overtime_requests (
                      CHECK (status IN ('PENDING','APPROVED','REJECTED')),
     approver_id      BIGINT,
     reject_reason    VARCHAR(500),
+    created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),     -- 에이징/긴급도 산정용
     CONSTRAINT fk_ot_user     FOREIGN KEY (user_id)     REFERENCES users(id),
     CONSTRAINT fk_ot_approver FOREIGN KEY (approver_id) REFERENCES users(id)
 );
