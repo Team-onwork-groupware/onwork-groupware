@@ -1,7 +1,9 @@
 -- OnWork 시연용 초기화 스크립트 (DemoResetService가 트랜잭션으로 실행).
--- 모든 데이터 테이블을 비우고 기본 더미데이터(seed + demo_seed + seed_0601)를 재삽입한 뒤,
--- 시연 시나리오용으로 개발팀장(최현준)·기획팀장(한소희)을 오늘 휴가 상태로 만든다.
--- 순수 SQL만 사용(psql 메타명령 \echo 등 금지). 비밀번호는 전원 'onwork1234!'.
+-- 정책(2026-06-01): 출퇴근·결재·일반 휴가신청 더미는 두지 않는다(깨끗한 상태에서 라이브 시연).
+--   유지: 직원/부서/인증, 연차 잔여(20일), 오늘의 일정, 급여.
+--   시연 세팅: 개발팀장(최현준)·기획팀장(한소희)만 오늘 휴가 → 두 팀 사원 휴가신청이
+--             대행자 경영지원팀장(박지수)에게 라우팅되는 흐름을 바로 시연.
+-- 순수 SQL만 사용(psql 메타명령 금지). 비밀번호는 전원 'onwork1234!'.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -15,7 +17,7 @@ TRUNCATE TABLE
   user_credentials, users, departments, work_groups
   RESTART IDENTITY CASCADE;
 
--- ============================================================ 1) 마스터 (seed.sql)
+-- ============================================================ 1) 마스터
 INSERT INTO work_groups (id, group_name, work_start_time, work_end_time, is_default)
 VALUES (1, '기본 9-to-6', '09:00', '18:00', TRUE);
 
@@ -81,158 +83,8 @@ SELECT setval(pg_get_serial_sequence('departments','id'),    (SELECT MAX(id) FRO
 SELECT setval(pg_get_serial_sequence('users','id'),          (SELECT MAX(id) FROM users));
 SELECT setval(pg_get_serial_sequence('leave_types','id'),    (SELECT MAX(id) FROM leave_types));
 
--- ============================================================ 2) 거래성 더미 (demo_seed.sql)
-INSERT INTO daily_work_records (user_id, date, clock_in_at, clock_out_at, overtime_minutes, status) VALUES
-(1,  '2026-05-18', '2026-05-18 08:55', '2026-05-18 18:05', 0,  'NORMAL'),
-(2,  '2026-05-18', '2026-05-18 08:50', '2026-05-18 18:10', 0,  'NORMAL'),
-(3,  '2026-05-18', '2026-05-18 08:58', '2026-05-18 18:02', 0,  'NORMAL'),
-(5,  '2026-05-18', '2026-05-18 08:55', '2026-05-18 18:00', 0,  'NORMAL'),
-(6,  '2026-05-18', '2026-05-18 09:00', '2026-05-18 18:00', 0,  'NORMAL'),
-(7,  '2026-05-18', '2026-05-18 08:50', '2026-05-18 18:05', 0,  'NORMAL'),
-(8,  '2026-05-18', '2026-05-18 09:00', '2026-05-18 19:30', 90, 'NORMAL'),
-(9,  '2026-05-18', '2026-05-18 09:18', '2026-05-18 18:00', 0,  'ANOMALY'),
-(10, '2026-05-18', '2026-05-18 08:55', '2026-05-18 18:00', 0,  'NORMAL'),
-(11, '2026-05-18', '2026-05-18 08:50', '2026-05-18 18:00', 0,  'NORMAL'),
-(17, '2026-05-18', '2026-05-18 08:55', '2026-05-18 18:05', 0,  'NORMAL'),
-(19, '2026-05-18', NULL,               NULL,               0,  'ANOMALY'),
-(1,  '2026-05-19', '2026-05-19 08:55', '2026-05-19 18:00', 0,  'NORMAL'),
-(5,  '2026-05-19', '2026-05-19 08:50', '2026-05-19 18:05', 0,  'NORMAL'),
-(7,  '2026-05-19', '2026-05-19 08:55', '2026-05-19 17:35', 0,  'ANOMALY'),
-(9,  '2026-05-19', '2026-05-19 08:58', '2026-05-19 18:00', 0,  'NORMAL'),
-(11, '2026-05-19', '2026-05-19 08:50', '2026-05-19 18:00', 0,  'NORMAL'),
-(17, '2026-05-19', '2026-05-19 08:55', '2026-05-19 18:05', 0,  'NORMAL'),
-(5,  '2026-05-20', '2026-05-20 08:55', '2026-05-20 18:00', 0,  'NORMAL'),
-(9,  '2026-05-20', '2026-05-20 09:00', '2026-05-20 18:00', 0,  'NORMAL'),
-(10, '2026-05-20', '2026-05-20 08:58', NULL,               0,  'ANOMALY'),
-(11, '2026-05-20', '2026-05-20 08:50', '2026-05-20 18:00', 0,  'NORMAL'),
-(15, '2026-05-20', NULL,               NULL,               0,  'ANOMALY'),
-(17, '2026-05-20', '2026-05-20 08:55', '2026-05-20 18:00', 0,  'NORMAL'),
-(5,  '2026-05-21', '2026-05-21 08:55', '2026-05-21 18:05', 0,  'NORMAL'),
-(6,  '2026-05-21', '2026-05-21 09:00', '2026-05-21 18:00', 0,  'NORMAL'),
-(9,  '2026-05-21', '2026-05-21 08:58', '2026-05-21 18:00', 0,  'NORMAL'),
-(11, '2026-05-21', '2026-05-21 08:55', '2026-05-21 18:00', 0,  'NORMAL'),
-(17, '2026-05-21', '2026-05-21 08:50', '2026-05-21 18:00', 0,  'NORMAL'),
-(5,  '2026-05-22', '2026-05-22 08:55', '2026-05-22 18:05', 0,  'NORMAL'),
-(8,  '2026-05-22', '2026-05-22 09:00', '2026-05-22 18:00', 0,  'NORMAL'),
-(9,  '2026-05-22', '2026-05-22 09:15', '2026-05-22 18:00', 0,  'ANOMALY'),
-(11, '2026-05-22', '2026-05-22 08:50', '2026-05-22 18:00', 0,  'NORMAL'),
-(12, '2026-05-22', '2026-05-22 08:55', '2026-05-22 17:35', 0,  'ANOMALY'),
-(17, '2026-05-22', '2026-05-22 08:55', '2026-05-22 18:00', 0,  'NORMAL');
-
-INSERT INTO work_anomalies (daily_work_record_id, anomaly_type) VALUES
-((SELECT id FROM daily_work_records WHERE user_id=9  AND date='2026-05-18'), 'LATE'),
-((SELECT id FROM daily_work_records WHERE user_id=19 AND date='2026-05-18'), 'ABSENT'),
-((SELECT id FROM daily_work_records WHERE user_id=7  AND date='2026-05-19'), 'EARLY_LEAVE'),
-((SELECT id FROM daily_work_records WHERE user_id=10 AND date='2026-05-20'), 'CLOCK_MISSING'),
-((SELECT id FROM daily_work_records WHERE user_id=15 AND date='2026-05-20'), 'ABSENT'),
-((SELECT id FROM daily_work_records WHERE user_id=9  AND date='2026-05-22'), 'LATE'),
-((SELECT id FROM daily_work_records WHERE user_id=12 AND date='2026-05-22'), 'EARLY_LEAVE');
-
-INSERT INTO overtime_requests (user_id, request_date, expected_start_at, expected_end_at, reason, status, approver_id) VALUES
-(9, '2026-05-25', '2026-05-25 18:30', '2026-05-25 20:30', '릴리스 대응',     'PENDING',  NULL),
-(7, '2026-05-26', '2026-05-26 18:30', '2026-05-26 21:00', '월말 마감 작업',  'PENDING',  NULL),
-(8, '2026-05-18', '2026-05-18 18:00', '2026-05-18 19:30', '장애 대응',       'APPROVED', 5);
-
-INSERT INTO hr_change_requests (change_type, target_user_id, payload, reason, status, requested_by) VALUES
-('CREATE', NULL,
- '{"name":"김신입","email":"newhire@onwork.kr","hire_date":"2026-06-01","department_id":2,"position":"사원","role":"EMPLOYEE"}'::jsonb,
- '6월 개발팀 신규 입사 예정', 'PENDING', 3),
-('UPDATE', 13,
- '{"position":"과장"}'::jsonb,
- '2026 상반기 진급', 'PENDING', 4);
-
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status)
-SELECT 6,  id, '2026-05-26', '2026-05-27', 2.0, '개인 사정',          'PENDING'
-  FROM leave_balances WHERE user_id=6  AND leave_type_id=1 AND year=2026;
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status)
-SELECT 13, id, '2026-05-25', '2026-05-25', 0.5, '병원 예약 (오전반차)','PENDING'
-  FROM leave_balances WHERE user_id=13 AND leave_type_id=1 AND year=2026;
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status)
-SELECT 18, id, '2026-05-27', '2026-05-29', 3.0, '가족 여행',          'PENDING'
-  FROM leave_balances WHERE user_id=18 AND leave_type_id=1 AND year=2026;
-
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status, approver_id, approved_at)
-SELECT 7,  id, '2026-05-15', '2026-05-15', 1.0, '경조사', 'APPROVED', 5, '2026-05-13 14:00'
-  FROM leave_balances WHERE user_id=7  AND leave_type_id=1 AND year=2026;
-UPDATE leave_balances SET used_days = used_days + 1.0 WHERE user_id=7  AND leave_type_id=1 AND year=2026;
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status, approver_id, approved_at)
-SELECT 17, id, '2026-05-12', '2026-05-13', 2.0, '개인 사정', 'APPROVED', 1, '2026-05-10 11:00'
-  FROM leave_balances WHERE user_id=17 AND leave_type_id=1 AND year=2026;
-UPDATE leave_balances SET used_days = used_days + 2.0 WHERE user_id=17 AND leave_type_id=1 AND year=2026;
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status, approver_id, approved_at)
-SELECT 19, id, '2026-05-14', '2026-05-14', 1.0, '취소된 일정', 'CANCELLED', 17, '2026-05-12 09:00'
-  FROM leave_balances WHERE user_id=19 AND leave_type_id=1 AND year=2026;
-INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status, approver_id, hold_reason)
-SELECT 22, id, '2026-05-30', '2026-06-01', 1.0, '가족 행사', 'ON_HOLD', 17, '월말 마감 시기 — 일정 재조정 필요'
-  FROM leave_balances WHERE user_id=22 AND leave_type_id=1 AND year=2026;
-
-INSERT INTO leave_histories (leave_balance_id, leave_request_id, change_type, change_days, before_days, after_days, changed_by)
-SELECT lr.leave_balance_id, lr.id, 'USE', -1.0, 20.0, 19.0, 5
-  FROM leave_requests lr WHERE lr.user_id=7 AND lr.start_date='2026-05-15';
-INSERT INTO leave_histories (leave_balance_id, leave_request_id, change_type, change_days, before_days, after_days, changed_by)
-SELECT lr.leave_balance_id, lr.id, 'USE', -2.0, 20.0, 18.0, 1
-  FROM leave_requests lr WHERE lr.user_id=17 AND lr.start_date='2026-05-12';
-INSERT INTO leave_histories (leave_balance_id, leave_request_id, change_type, change_days, before_days, after_days, changed_by)
-SELECT lr.leave_balance_id, lr.id, 'USE', -1.0, 20.0, 19.0, 17
-  FROM leave_requests lr WHERE lr.user_id=19 AND lr.start_date='2026-05-14';
-INSERT INTO leave_histories (leave_balance_id, leave_request_id, change_type, change_days, before_days, after_days, changed_by)
-SELECT lr.leave_balance_id, lr.id, 'CANCEL', 1.0, 19.0, 20.0, 19
-  FROM leave_requests lr WHERE lr.user_id=19 AND lr.start_date='2026-05-14';
-
-INSERT INTO notifications (user_id, type, ref_type, ref_id, message)
-SELECT u.id, 'HR_CHANGE_REQUESTED', 'HR', r.id,
-       '새 인사 변경 요청('|| r.change_type ||')이 결재 대기 중입니다'
-  FROM users u, hr_change_requests r
- WHERE u.role IN ('CEO','VP') AND r.status='PENDING';
-INSERT INTO notifications (user_id, type, ref_type, ref_id, message)
-SELECT la.approver_id, 'LEAVE_REQUESTED', 'LEAVE', lr.id,
-       '새 휴가 신청이 결재 대기 중입니다'
-  FROM leave_requests lr
-  JOIN users u ON u.id = lr.user_id
-  JOIN leave_approvers la ON la.department_id = u.department_id
- WHERE lr.status='PENDING';
-INSERT INTO notifications (user_id, type, ref_type, ref_id, message, is_read)
-SELECT lr.user_id, 'LEAVE_APPROVED', 'LEAVE', lr.id, '휴가 신청이 승인되었습니다', TRUE
-  FROM leave_requests lr WHERE lr.status='APPROVED';
-INSERT INTO notifications (user_id, type, ref_type, ref_id, message)
-SELECT lr.user_id, 'LEAVE_ON_HOLD', 'LEAVE', lr.id,
-       '휴가 신청이 보류되었습니다: '||lr.hold_reason
-  FROM leave_requests lr WHERE lr.status='ON_HOLD';
-
-INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
-SELECT 'LEAVE', lr.id, lr.user_id,
-       CASE WHEN la.is_absent AND la.delegate_id IS NOT NULL THEN la.delegate_id ELSE la.approver_id END,
-       'PENDING', u.department_id
-  FROM leave_requests lr
-  JOIN users u ON u.id = lr.user_id
-  JOIN leave_approvers la ON la.department_id = u.department_id
- WHERE lr.status = 'PENDING'
-ON CONFLICT (type, ref_id) DO NOTHING;
-INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
-SELECT 'ATTENDANCE', ot.id, ot.user_id, d.manager_id, 'PENDING', u.department_id
-  FROM overtime_requests ot
-  JOIN users u ON u.id = ot.user_id
-  JOIN departments d ON d.id = u.department_id
- WHERE ot.status = 'PENDING'
-ON CONFLICT (type, ref_id) DO NOTHING;
-INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
-SELECT 'HR', h.id, h.requested_by, NULL, 'PENDING', u.department_id
-  FROM hr_change_requests h
-  JOIN users u ON u.id = h.requested_by
- WHERE h.status = 'PENDING' AND u.department_id IS NOT NULL
-ON CONFLICT (type, ref_id) DO NOTHING;
-
-INSERT INTO onboarding_tutorial_progress (user_id, tutorial_code, status, current_step, last_shown_at)
-VALUES (5, 'MANAGER_TOUR', 'IN_PROGRESS', 2, '2026-05-22 10:00');
-
-UPDATE hr_change_requests SET created_at = NOW() - INTERVAL '4 days'
- WHERE status='PENDING' AND change_type='CREATE';
-UPDATE leave_requests SET created_at = NOW() - INTERVAL '5 days'
- WHERE status='PENDING' AND user_id = 6;
-UPDATE overtime_requests SET created_at = NOW() - INTERVAL '3 days'
- WHERE status='PENDING' AND user_id = 9;
-
--- ============================================================ 3) 0601 추가 (seed_0601.sql)
+-- ============================================================ 2) 마이페이지/일정 더미 (근태·결재·휴가는 두지 않음)
+-- 오늘의 일정(사원당 3일치) — 회의 일정. 근태 기록과 무관.
 INSERT INTO schedules (user_id, date, start_time, end_time, title, kind)
 SELECT u.id, CURRENT_DATE + t.day_offset, t.start_time, t.end_time, t.title, t.kind
 FROM users u
@@ -244,6 +96,7 @@ CROSS JOIN (VALUES
 ) AS t(day_offset, start_time, end_time, title, kind)
 WHERE u.status = 'ACTIVE';
 
+-- 급여(마이페이지 전용)
 INSERT INTO salaries (user_id, base_pay, meal_allowance, transport_allowance, position_allowance, pay_day)
 SELECT u.id,
        CASE u.role
@@ -260,34 +113,9 @@ FROM users u
 WHERE u.status = 'ACTIVE'
 ON CONFLICT (user_id) DO NOTHING;
 
-INSERT INTO daily_work_records (user_id, date, clock_in_at, clock_out_at, overtime_minutes, status)
-SELECT u.id, g.d::date, g.d + TIME '09:00', g.d + TIME '18:00', 0, 'NORMAL'
-FROM users u
-CROSS JOIN generate_series(DATE '2026-06-01', DATE '2026-06-26', INTERVAL '1 day') AS g(d)
-WHERE u.status = 'ACTIVE'
-  AND EXTRACT(ISODOW FROM g.d) < 6
-ON CONFLICT (user_id, date) DO NOTHING;
-
-UPDATE daily_work_records
-SET clock_in_at = DATE '2026-06-10' + TIME '09:14', status = 'ANOMALY'
-WHERE date = DATE '2026-06-10'
-  AND user_id IN (SELECT id FROM users WHERE status = 'ACTIVE');
-INSERT INTO work_anomalies (daily_work_record_id, anomaly_type)
-SELECT r.id, 'LATE'
-FROM daily_work_records r
-WHERE r.date = DATE '2026-06-10'
-  AND r.user_id IN (SELECT id FROM users WHERE status = 'ACTIVE')
-  AND NOT EXISTS (
-        SELECT 1 FROM work_anomalies a WHERE a.daily_work_record_id = r.id AND a.anomaly_type = 'LATE');
-
-UPDATE daily_work_records SET overtime_minutes = 120, clock_out_at = DATE '2026-06-17' + TIME '20:00'
-WHERE date = DATE '2026-06-17' AND user_id IN (SELECT id FROM users WHERE status = 'ACTIVE');
-UPDATE daily_work_records SET overtime_minutes = 80, clock_out_at = DATE '2026-06-24' + TIME '19:20'
-WHERE date = DATE '2026-06-24' AND user_id IN (SELECT id FROM users WHERE status = 'ACTIVE');
-
--- ============================================================ 4) 시연 시나리오: 개발팀장·기획팀장 오늘 휴가
+-- ============================================================ 3) 시연 시나리오: 개발팀장·기획팀장 오늘 휴가
 -- 최현준(5, 개발팀장) / 한소희(17, 기획팀장)을 오늘부터 승인 휴가 → 두 팀 사원의 휴가 신청이
--- 대행자(경영지원팀장 박지수, id 3)에게 라우팅되는 것을 시연.
+-- 대행자(경영지원팀장 박지수, id 3)에게 라우팅되는 것을 시연. (그 외 출퇴근/결재/휴가 데이터는 없음.)
 INSERT INTO leave_requests (user_id, leave_balance_id, start_date, end_date, days_used, reason, status, approver_id, approved_at)
 SELECT 5,  id, CURRENT_DATE, CURRENT_DATE + 2, 3.0, '연차 (시연용 — 팀장 부재)', 'APPROVED', 1, NOW()
   FROM leave_balances WHERE user_id=5  AND leave_type_id=1 AND year=2026;
