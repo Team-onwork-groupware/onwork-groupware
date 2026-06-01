@@ -131,4 +131,8 @@ public class HrChangeRequest {
         this.rejectReason = rejectReason;
         this.processedAt = LocalDateTime.now();
     }
+
+    public void assignBatch(String batchId) {
+        this.batchId = batchId;
+    }
 }

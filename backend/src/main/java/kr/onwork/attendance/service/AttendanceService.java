@@ -1,26 +1,33 @@
 package kr.onwork.attendance.service;
 
 import java.time.Duration;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import kr.onwork.approval.service.ApprovalRoutingService;
 import kr.onwork.attendance.domain.AnomalyType;
 import kr.onwork.attendance.domain.AttendanceSetting;
 import kr.onwork.attendance.domain.DailyWorkRecord;
+import kr.onwork.attendance.domain.MonthlySummary;
 import kr.onwork.attendance.domain.OvertimeRequest;
 import kr.onwork.attendance.domain.OvertimeStatus;
 import kr.onwork.attendance.domain.WorkAnomaly;
+import kr.onwork.attendance.dto.AnomalyConfirmRequest;
 import kr.onwork.attendance.dto.AnomalyResponse;
 import kr.onwork.attendance.dto.AttendanceProcessRequest;
 import kr.onwork.attendance.dto.ClockResponse;
+import kr.onwork.attendance.dto.MonthlySummaryRequest;
 import kr.onwork.attendance.dto.OvertimeCreateRequest;
 import kr.onwork.attendance.dto.OvertimeResponse;
 import kr.onwork.attendance.repository.AttendanceSettingRepository;
 import kr.onwork.attendance.repository.DailyWorkRecordRepository;
+import kr.onwork.attendance.repository.MonthlySummaryRepository;
 import kr.onwork.attendance.repository.OvertimeRequestRepository;
 import kr.onwork.attendance.repository.WorkAnomalyRepository;
 import kr.onwork.common.domain.Role;
@@ -30,6 +37,7 @@ import kr.onwork.common.error.BusinessException;
 import kr.onwork.common.error.ErrorCode;
 import kr.onwork.common.repository.UserRepository;
 import kr.onwork.common.security.AuthPrincipal;
+import kr.onwork.notification.service.NotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,24 +53,36 @@ public class AttendanceService {
     private final OvertimeRequestRepository overtimeRepository;
     private final AttendanceSettingRepository settingRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
+    private final MonthlySummaryRepository monthlySummaryRepository;
+    private final NotificationService notificationService;
+    private final ApprovalRoutingService approvalRoutingService;
 
     public AttendanceService(DailyWorkRecordRepository recordRepository,
                              WorkAnomalyRepository anomalyRepository,
                              OvertimeRequestRepository overtimeRepository,
                              AttendanceSettingRepository settingRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             Clock clock,
+                             MonthlySummaryRepository monthlySummaryRepository,
+                             NotificationService notificationService,
+                             ApprovalRoutingService approvalRoutingService) {
         this.recordRepository = recordRepository;
         this.anomalyRepository = anomalyRepository;
         this.overtimeRepository = overtimeRepository;
         this.settingRepository = settingRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
+        this.monthlySummaryRepository = monthlySummaryRepository;
+        this.notificationService = notificationService;
+        this.approvalRoutingService = approvalRoutingService;
     }
 
     // ---------------------------------------------------------------- 출근
     @Transactional
     public ClockResponse clockIn(AuthPrincipal principal) {
         User user = loadUser(principal.userId());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         DailyWorkRecord record = recordRepository.findByUserIdAndDate(user.getId(), today)
                 .orElseGet(() -> DailyWorkRecord.of(user.getId(), today));
@@ -84,7 +104,7 @@ public class AttendanceService {
     @Transactional
     public ClockResponse clockOut(AuthPrincipal principal) {
         User user = loadUser(principal.userId());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         DailyWorkRecord record = recordRepository.findByUserIdAndDate(user.getId(), today)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "출근 기록이 없습니다"));
@@ -104,12 +124,16 @@ public class AttendanceService {
         if (early) {
             anomalyRepository.save(WorkAnomaly.of(saved.getId(), AnomalyType.EARLY_LEAVE));
         }
+        if (overtime > 0) {
+            saved.markAnomaly();
+            anomalyRepository.save(WorkAnomaly.of(saved.getId(), AnomalyType.UNAPPROVED_OVERTIME));
+        }
         return ClockResponse.from(saved, false, early);
     }
 
     @Transactional(readOnly = true)
     public ClockResponse today(AuthPrincipal principal) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         return recordRepository.findByUserIdAndDate(principal.userId(), today)
                 .map(r -> ClockResponse.from(r, false, false))
                 .orElse(new ClockResponse(null, today, null, null, 0, "NONE", false, false));
@@ -166,7 +190,7 @@ public class AttendanceService {
     }
 
     @Transactional
-    public void confirmAnomaly(AuthPrincipal principal, Long anomalyId) {
+    public AnomalyResponse confirmAnomaly(AuthPrincipal principal, Long anomalyId, AnomalyConfirmRequest req) {
         WorkAnomaly anomaly = anomalyRepository.findById(anomalyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (anomaly.isConfirmed()) {
@@ -175,7 +199,107 @@ public class AttendanceService {
         DailyWorkRecord record = recordRepository.findById(anomaly.getDailyWorkRecordId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         requireManageable(principal, record.getUserId());
+        if (req != null && req.anomalyType() != null) {
+            anomaly.reclassify(req.anomalyType());
+        }
+        if (anomaly.getAnomalyType() == AnomalyType.UNAPPROVED_OVERTIME
+                && req != null
+                && Boolean.FALSE.equals(req.overtimeApproved())) {
+            record.setOvertimeMinutes(0);
+        }
         anomaly.confirm(principal.userId());
+        User target = loadUser(record.getUserId());
+        return new AnomalyResponse(anomaly.getId(), record.getUserId(), target.getName(),
+                record.getDate(), anomaly.getAnomalyType().name(), true);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> monthlySummary(AuthPrincipal principal, YearMonth yearMonth) {
+        List<User> scope = scopedUsers(principal);
+        List<Long> userIds = scope.stream().map(User::getId).toList();
+        LocalDate start = yearMonth.atDay(1);
+        LocalDate end = yearMonth.atEndOfMonth();
+        List<DailyWorkRecord> records = userIds.isEmpty()
+                ? List.of()
+                : recordRepository.findByUserIdInAndDateBetween(userIds, start, end);
+        long anomalyCount = records.stream()
+                .filter(r -> r.getStatus().name().equals("ANOMALY"))
+                .count();
+        long clockMissingCount = records.stream()
+                .filter(r -> r.hasClockIn() && !r.hasClockOut())
+                .count();
+        int overtimeMinutes = records.stream()
+                .mapToInt(DailyWorkRecord::getOvertimeMinutes)
+                .sum();
+        return Map.of(
+                "year_month", yearMonth.toString(),
+                "total_employees", scope.size(),
+                "record_count", records.size(),
+                "anomaly_count", anomalyCount,
+                "clock_missing_count", clockMissingCount,
+                "overtime_minutes", overtimeMinutes
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> closeMonthlySummary(AuthPrincipal principal, MonthlySummaryRequest req) {
+        YearMonth yearMonth = YearMonth.of(req.year(), req.month());
+        List<User> scope = scopedUsers(principal);
+        List<Long> userIds = scope.stream().map(User::getId).toList();
+        String key = yearMonth.toString();
+        if (monthlySummaryRepository.existsByUserIdInAndYearMonth(userIds, key)) {
+            throw new BusinessException(ErrorCode.ALREADY_PROCESSED, "이미 마감된 월입니다");
+        }
+        LocalDate start = yearMonth.atDay(1);
+        LocalDate end = yearMonth.atEndOfMonth();
+        List<DailyWorkRecord> records = userIds.isEmpty()
+                ? List.of()
+                : recordRepository.findByUserIdInAndDateBetween(userIds, start, end);
+        Map<Long, List<DailyWorkRecord>> byUser = records.stream()
+                .collect(Collectors.groupingBy(DailyWorkRecord::getUserId));
+        List<WorkAnomaly> anomalies = records.isEmpty()
+                ? List.of()
+                : anomalyRepository.findByDailyWorkRecordIdIn(records.stream().map(DailyWorkRecord::getId).toList());
+        long unconfirmed = anomalies.stream().filter(a -> !a.isConfirmed()).count();
+        if (unconfirmed > 0 && !req.force()) {
+            return Map.of(
+                    "year_month", key,
+                    "closed", false,
+                    "requires_confirmation", true,
+                    "unconfirmed_anomaly_count", unconfirmed,
+                    "message", "미확정 근태 이상이 있어 확인 후 마감해야 합니다"
+            );
+        }
+        Map<Long, List<WorkAnomaly>> anomaliesByRecord = anomalies.stream()
+                .collect(Collectors.groupingBy(WorkAnomaly::getDailyWorkRecordId));
+        int closed = 0;
+        int totalOvertime = 0;
+        for (User u : scope) {
+            List<DailyWorkRecord> userRecords = byUser.getOrDefault(u.getId(), List.of());
+            int late = 0;
+            int early = 0;
+            int absent = 0;
+            int overtime = 0;
+            for (DailyWorkRecord r : userRecords) {
+                overtime += r.getOvertimeMinutes();
+                for (WorkAnomaly a : anomaliesByRecord.getOrDefault(r.getId(), List.of())) {
+                    if (a.getAnomalyType() == AnomalyType.LATE) late++;
+                    if (a.getAnomalyType() == AnomalyType.EARLY_LEAVE) early++;
+                    if (a.getAnomalyType() == AnomalyType.ABSENT) absent++;
+                }
+            }
+            totalOvertime += overtime;
+            monthlySummaryRepository.save(MonthlySummary.close(
+                    u.getId(), key, late, early, absent, overtime, principal.userId()));
+            closed++;
+        }
+        return Map.of(
+                "year_month", key,
+                "closed", true,
+                "closed_count", closed,
+                "unconfirmed_anomaly_count", unconfirmed,
+                "total_overtime_minutes", totalOvertime
+        );
     }
 
     // ---------------------------------------------------------------- 시간외근로 (UC-03/04)
@@ -186,6 +310,12 @@ public class AttendanceService {
         }
         OvertimeRequest saved = overtimeRepository.save(OvertimeRequest.create(
                 principal.userId(), req.requestDate(), req.expectedStartAt(), req.expectedEndAt(), req.reason()));
+        scopedUsersForManagerNotification(principal.userId()).forEach(managerId ->
+                notificationService.notify(managerId, NotificationService.OVERTIME_REQUESTED,
+                        "ATTENDANCE", saved.getId(), "시간외 근로 신청이 결재 대기 중입니다"));
+        Long approverId = managerIdOf(principal.userId());
+        approvalRoutingService.open(ApprovalRoutingService.TYPE_OVERTIME, saved.getId(),
+                principal.userId(), approverId, departmentIdOf(principal.userId()));
         return OvertimeResponse.from(saved);
     }
 
@@ -197,9 +327,10 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public List<OvertimeResponse> overtimeInbox(AuthPrincipal principal) {
-        List<Long> ids = scopedUsers(principal).stream().map(User::getId).toList();
-        return overtimeRepository.findByUserIdInAndStatusOrderByIdDesc(ids, OvertimeStatus.PENDING)
-                .stream().map(OvertimeResponse::from).toList();
+        Map<Long, String> nameById = scopedUsers(principal).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+        return overtimeRepository.findByUserIdInAndStatusOrderByIdDesc(nameById.keySet().stream().toList(), OvertimeStatus.PENDING)
+                .stream().map(r -> OvertimeResponse.from(r, nameById.get(r.getUserId()))).toList();
     }
 
     @Transactional
@@ -218,8 +349,16 @@ public class AttendanceService {
                 throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "반려 사유는 필수입니다");
             }
             request.reject(principal.userId(), req.reason());
+            approvalRoutingService.complete(ApprovalRoutingService.TYPE_OVERTIME, request.getId(),
+                    principal.userId(), "REJECT", req.reason());
+            notificationService.notify(request.getUserId(), NotificationService.OVERTIME_REJECTED,
+                    "ATTENDANCE", request.getId(), "시간외 근로 신청이 반려되었습니다: " + req.reason());
         } else {
             request.approve(principal.userId());
+            approvalRoutingService.complete(ApprovalRoutingService.TYPE_OVERTIME, request.getId(),
+                    principal.userId(), "APPROVE", null);
+            notificationService.notify(request.getUserId(), NotificationService.OVERTIME_APPROVED,
+                    "ATTENDANCE", request.getId(), "시간외 근로 신청이 승인되었습니다");
         }
         return OvertimeResponse.from(request);
     }
@@ -234,6 +373,15 @@ public class AttendanceService {
         return userRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
+    private List<Long> scopedUsersForManagerNotification(Long requesterId) {
+        User requester = loadUser(requesterId);
+        if (requester.getDepartment() == null || requester.getDepartment().getManagerId() == null) {
+            return List.of();
+        }
+        Long managerId = requester.getDepartment().getManagerId();
+        return managerId.equals(requesterId) ? List.of() : List.of(managerId);
+    }
+
     /** 역할별 조회 범위: 경영진/HR=전체, 팀장=본인 부서, 사원=본인. */
     private List<User> scopedUsers(AuthPrincipal principal) {
         Role role = principal.role();
@@ -246,6 +394,16 @@ public class AttendanceService {
             return userRepository.search(deptId, null, null);
         }
         return List.of(loadUser(principal.userId()));
+    }
+
+    private Long managerIdOf(Long userId) {
+        User user = loadUser(userId);
+        return user.getDepartment() != null ? user.getDepartment().getManagerId() : null;
+    }
+
+    private Long departmentIdOf(Long userId) {
+        User user = loadUser(userId);
+        return user.getDepartment() != null ? user.getDepartment().getId() : null;
     }
 
     private void requireManageable(AuthPrincipal principal, Long targetUserId) {

@@ -42,6 +42,20 @@ public class LeaveBalance {
         return totalDays.subtract(usedDays);
     }
 
+    public static LeaveBalance create(Long userId, Long leaveTypeId, BigDecimal totalDays, short year) {
+        LeaveBalance b = new LeaveBalance();
+        b.userId = userId;
+        b.leaveTypeId = leaveTypeId;
+        b.totalDays = totalDays;
+        b.usedDays = BigDecimal.ZERO;
+        b.year = year;
+        return b;
+    }
+
+    public void grant(BigDecimal days) {
+        this.totalDays = this.totalDays.add(days);
+    }
+
     public void deduct(BigDecimal days) {
         this.usedDays = this.usedDays.add(days);
     }

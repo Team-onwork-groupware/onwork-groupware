@@ -47,6 +47,12 @@ public class OnboardingProgress {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "created_at", nullable = false, insertable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false, insertable = false)
+    private LocalDateTime updatedAt;
+
     public static OnboardingProgress start(Long userId, String tutorialCode) {
         OnboardingProgress p = new OnboardingProgress();
         p.userId = userId;
@@ -70,5 +76,18 @@ public class OnboardingProgress {
     public void dismiss() {
         this.status = OnboardingStatus.DISMISSED;
         this.dismissedAt = LocalDateTime.now();
+    }
+
+    public void snoozeToday() {
+        this.lastShownAt = LocalDateTime.now();
+    }
+
+    public void restart() {
+        this.status = OnboardingStatus.NOT_STARTED;
+        this.currentStep = 0;
+        this.lastShownAt = null;
+        this.dismissedAt = null;
+        this.completedAt = null;
+        this.createdAt = LocalDateTime.now();
     }
 }

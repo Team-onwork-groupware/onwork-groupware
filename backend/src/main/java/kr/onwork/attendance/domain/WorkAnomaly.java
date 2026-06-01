@@ -53,4 +53,8 @@ public class WorkAnomaly {
         this.confirmedBy = managerId;
         this.confirmedAt = LocalDateTime.now();
     }
+
+    public void reclassify(AnomalyType type) {
+        this.anomalyType = type;
+    }
 }

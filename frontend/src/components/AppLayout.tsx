@@ -2,19 +2,23 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
+import { hrSurfaceLabel, isApprover } from '../lib/roles'
+import OnboardingGuide from './OnboardingGuide'
 
 const NAV = [
-  { to: '/dashboard', label: '홈' },
-  { to: '/hr', label: '인사' },
-  { to: '/attendance', label: '근태' },
-  { to: '/leave', label: '휴가' },
-  { to: '/approvals', label: '결재함' },
+  { to: '/dashboard', label: '홈', icon: 'home', show: () => true },
+  { to: '/hr', label: (role?: string | null) => hrSurfaceLabel(role), icon: 'people', show: () => true },
+  { to: '/attendance', label: '근태', icon: 'clock', show: () => true },
+  { to: '/leave', label: '휴가', icon: 'flag', show: () => true },
+  { to: '/approvals', label: '결재함', icon: 'approval', show: (role?: string | null) => isApprover(role) },
 ]
 
 interface DigestItem {
   id: number
   type: string
   message: string
+  refType: string | null
+  refId: number | null
   read: boolean
 }
 interface Digest {
@@ -23,6 +27,59 @@ interface Digest {
   longPending: number
   recentApproved: number
   recentItems: DigestItem[]
+}
+
+function BellIcon() {
+  return (
+    <svg className="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 9.8c0-3.3-2.2-5.8-6-5.8S6 6.5 6 9.8v2.8c0 .9-.3 1.7-.9 2.4l-.8.9c-.4.5-.1 1.2.6 1.2h14.2c.7 0 1-.8.6-1.2l-.8-.9c-.6-.7-.9-1.5-.9-2.4V9.8Z" />
+      <path d="M9.6 18.5c.4 1 1.2 1.5 2.4 1.5s2-.5 2.4-1.5" />
+    </svg>
+  )
+}
+
+function NavIcon({ name }: { name: string }) {
+  if (name === 'home') {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4.5 11 12 4.8 19.5 11" />
+        <path d="M6.5 10.2v8.3h4v-4h3v4h4v-8.3" />
+      </svg>
+    )
+  }
+  if (name === 'people') {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="8.5" r="3" />
+        <path d="M4.8 18c.7-2.4 2.1-3.6 4.2-3.6s3.5 1.2 4.2 3.6" />
+        <path d="M15.5 11.5a2.5 2.5 0 1 0 0-5" />
+        <path d="M15 14.7c1.9.3 3.3 1.4 4.2 3.3" />
+      </svg>
+    )
+  }
+  if (name === 'clock') {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 7.5v5l3.2 2" />
+      </svg>
+    )
+  }
+  if (name === 'flag') {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 4.5v15" />
+        <path d="M7 6h8.5l-1.8 3 1.8 3H7" />
+      </svg>
+    )
+  }
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 4.5h7l3 3v12H7z" />
+      <path d="M14 4.5v3h3" />
+      <path d="m9.5 13 1.8 1.8 3.7-4" />
+    </svg>
+  )
 }
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -41,7 +98,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    fetchDigest()
+    const timer = window.setTimeout(() => {
+      void fetchDigest()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [fetchDigest])
 
   async function markAllRead() {
@@ -49,25 +109,57 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     await fetchDigest()
   }
 
+  async function openNotification(item: DigestItem) {
+    await api.patch(`/notifications/${item.id}/read`)
+    setNotificationsOpen(false)
+    await fetchDigest()
+    const refType = item.refType ?? item.type.split('_')[0]
+    if (refType === 'LEAVE') navigate('/leave')
+    else if (refType === 'ATTENDANCE') navigate('/attendance')
+    else if (refType === 'HR') navigate('/hr')
+    else navigate('/approvals')
+  }
+
+  const setNotificationsOpen = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (nextOpen) void fetchDigest()
+  }, [fetchDigest])
+
+  useEffect(() => {
+    function onOpenNotifications() {
+      setNotificationsOpen(true)
+    }
+    window.addEventListener('onwork:notifications-open', onOpenNotifications)
+    return () => window.removeEventListener('onwork:notifications-open', onOpenNotifications)
+  }, [setNotificationsOpen])
+
   async function onLogout() {
     await logout()
     navigate('/login')
   }
 
   const unread = digest?.unread ?? 0
+  const navItems = NAV
+    .filter((item) => item.show(user?.role))
+    .map((item) => ({
+      to: item.to,
+      label: typeof item.label === 'function' ? item.label(user?.role) : item.label,
+      icon: item.icon,
+    }))
 
   return (
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-brand">OnWork</div>
         <nav>
-          {NAV.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
             >
-              {item.label}
+              <NavIcon name={item.icon} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -79,17 +171,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <button
               className="bell"
               data-testid="notif-bell"
-              onClick={() => { setOpen(!open); if (!open) fetchDigest() }}
+              onClick={() => setNotificationsOpen(!open)}
               title="알림"
+              aria-label="알림"
             >
-              🔔{unread > 0 && <span className="bell-badge">{unread}</span>}
+              <BellIcon />
+              {unread > 0 && <span className="bell-badge">{unread}</span>}
             </button>
             {open && digest && (
               <div className="bell-dropdown" data-testid="notif-dropdown">
                 <div className="bell-summary">
                   <div><strong>{digest.pendingApprovals}</strong><span>결재 대기</span></div>
                   <div><strong>{digest.longPending}</strong><span>긴급</span></div>
-                  <div><strong>{digest.unread}</strong><span>안읽음</span></div>
+                  <div><strong>{digest.unread}</strong><span>읽지 않음</span></div>
                 </div>
                 <ul className="bell-list">
                   {digest.recentItems.length === 0 ? (
@@ -97,8 +191,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   ) : (
                     digest.recentItems.map((n) => (
                       <li key={n.id} className={n.read ? 'read' : 'unread'}>
-                        <span className="bell-type">{n.type.split('_')[0]}</span>
-                        <span>{n.message}</span>
+                        <button className="bell-item" onClick={() => openNotification(n)}>
+                          <span className="bell-type">{n.type.split('_')[0]}</span>
+                          <span>{n.message}</span>
+                        </button>
                       </li>
                     ))
                   )}
@@ -118,6 +214,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         <section className="content">{children}</section>
+        <OnboardingGuide onSetNotificationsOpen={setNotificationsOpen} />
       </div>
     </div>
   )

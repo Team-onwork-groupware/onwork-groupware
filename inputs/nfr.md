@@ -1,29 +1,43 @@
-# Non-Functional Requirements
+# Non-Functional Requirements — OnWork 0529
 
 ## Performance
 
-- 핵심 응답 시간 목표: (예: 첫 페인트 1.5초, API p95 300ms)
-- 동시 사용자 목표:
+Target environment: local Docker PostgreSQL/Redis + Spring Boot backend + Vite frontend.
 
-## Accessibility
+| Flow | Budget |
+|---|---|
+| Login | p95 <= 300ms, p99 <= 600ms |
+| Approval inbox | p95 <= 400ms for 100 pending items |
+| Employee list | p95 <= 350ms for 1,000 employees |
+| Attendance anomalies | p95 <= 400ms for 1 month / 1 department |
+| Frontend first usable screen | <= 2.0s on local dev |
 
-- WCAG 레벨: (A / AA / AAA)
-- 키보드 네비게이션 필수 여부:
-- 색대비 최소 기준:
+Load test baseline:
+- 50 concurrent users for normal smoke.
+- 100 concurrent users for presentation evidence.
+- Error rate <= 1%.
+
+## Reliability
+
+- Approval processing must be transactional per item.
+- HR batch approval allows partial success and records failure reason per item.
+- Self-healing loop may retry implementation/test failures up to 3 times.
 
 ## Security
 
-- 인증 방식:
-- 비밀 데이터 처리:
-- 외부 API 키 노출 위험 지점:
+- JWT access token: 30 minutes.
+- RBAC hierarchy: CEO > VP > HR_MANAGER > MANAGER > EMPLOYEE.
+- Resigned/inactive users cannot login.
+- No secret, token, or production setting may be committed.
 
-## Browser/Platform Support
+## Accessibility
 
-- 데스크톱 브라우저:
-- 모바일 브라우저:
-- 최소 화면 너비:
+- Keyboard focus must reach primary navigation, forms, drawer/modal close, and approval actions.
+- Buttons must have visible labels; icon-only controls need accessible labels.
+- Color must not be the only state signal.
 
-## Observability
+## Observability and Evidence
 
-- 로그 수집:
-- 에러 추적:
+- Tests and benchmark results are saved under `reports/` when generated.
+- ADR decisions must explain why Redis/JWT/layered architecture/approvals routing are used.
+- Performance claims must cite measured p95/p99 or be marked unverified.

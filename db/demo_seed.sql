@@ -162,6 +162,32 @@ SELECT lr.user_id, 'LEAVE_ON_HOLD', 'LEAVE', lr.id,
        '휴가 신청이 보류되었습니다: '||lr.hold_reason
   FROM leave_requests lr WHERE lr.status='ON_HOLD';
 
+-- 결재 라우팅 인덱스 — 통합 결재함의 물리 approvals 테이블 동기화
+INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
+SELECT 'LEAVE', lr.id, lr.user_id,
+       CASE WHEN la.is_absent AND la.delegate_id IS NOT NULL THEN la.delegate_id ELSE la.approver_id END,
+       'PENDING', u.department_id
+  FROM leave_requests lr
+  JOIN users u ON u.id = lr.user_id
+  JOIN leave_approvers la ON la.department_id = u.department_id
+ WHERE lr.status = 'PENDING'
+ON CONFLICT (type, ref_id) DO NOTHING;
+
+INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
+SELECT 'ATTENDANCE', ot.id, ot.user_id, d.manager_id, 'PENDING', u.department_id
+  FROM overtime_requests ot
+  JOIN users u ON u.id = ot.user_id
+  JOIN departments d ON d.id = u.department_id
+ WHERE ot.status = 'PENDING'
+ON CONFLICT (type, ref_id) DO NOTHING;
+
+INSERT INTO approvals (type, ref_id, requester_id, approver_id, status, department_id)
+SELECT 'HR', h.id, h.requested_by, NULL, 'PENDING', u.department_id
+  FROM hr_change_requests h
+  JOIN users u ON u.id = h.requested_by
+ WHERE h.status = 'PENDING' AND u.department_id IS NOT NULL
+ON CONFLICT (type, ref_id) DO NOTHING;
+
 -- ============================================================
 -- 6) 온보딩 — MANAGER_TOUR 진행 중
 -- ============================================================

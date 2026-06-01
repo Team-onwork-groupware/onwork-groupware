@@ -73,6 +73,10 @@ public class DailyWorkRecord {
         this.status = WorkStatus.ANOMALY;
     }
 
+    public void setOvertimeMinutes(int overtimeMinutes) {
+        this.overtimeMinutes = Math.max(overtimeMinutes, 0);
+    }
+
     public boolean hasClockIn() {
         return clockInAt != null;
     }

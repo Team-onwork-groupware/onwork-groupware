@@ -10,6 +10,8 @@ import kr.onwork.hr.dto.ChangeRequestResponse;
 import kr.onwork.hr.dto.CreateChangeRequestRequest;
 import kr.onwork.hr.dto.DepartmentResponse;
 import kr.onwork.hr.dto.EmployeeResponse;
+import kr.onwork.hr.dto.HrBatchProcessRequest;
+import kr.onwork.hr.dto.HrBatchProcessResponse;
 import kr.onwork.hr.dto.ProcessRequest;
 import kr.onwork.hr.service.HrService;
 import org.springframework.http.HttpStatus;
@@ -39,7 +41,7 @@ public class HrController {
     /** 직원 목록 조회 (역할별 범위 차등). */
     @GetMapping("/employees")
     public Map<String, Object> listEmployees(
-            @RequestParam(required = false) Long departmentId,
+            @RequestParam(name = "department_id", required = false) Long departmentId,
             @RequestParam(required = false) UserStatus status,
             @RequestParam(required = false) String keyword) {
         List<EmployeeResponse> items =
@@ -74,6 +76,13 @@ public class HrController {
     @PatchMapping("/change-requests/{id}/process")
     public ChangeRequestResponse process(@PathVariable Long id, @Valid @RequestBody ProcessRequest req) {
         return hrService.process(SecurityUtil.currentPrincipal(), id, req);
+    }
+
+    /** 0529 명세: 인사 변경 요청 일괄 승인. 최대 50건, 부분 성공, batch_id 감사 추적. */
+    @PreAuthorize("hasRole('VP')")
+    @PostMapping("/change-requests/batch-process")
+    public HrBatchProcessResponse batchProcess(@Valid @RequestBody HrBatchProcessRequest req) {
+        return hrService.batchProcess(SecurityUtil.currentPrincipal(), req);
     }
 
     // ---------- 임시저장 (UC-HR-01 A1) ----------
@@ -117,7 +126,7 @@ public class HrController {
     @PreAuthorize("hasRole('HR_MANAGER')")
     @GetMapping("/change-requests/next-employee-no")
     public Map<String, String> suggestEmployeeNo() {
-        return Map.of("employeeNo", hrService.suggestNextEmployeeNo());
+        return Map.of("employee_no", hrService.suggestNextEmployeeNo());
     }
 
     /** 부서 드롭다운(미분류 옵션은 프론트가 추가). */

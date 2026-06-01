@@ -1,9 +1,12 @@
 package kr.onwork.hr.service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import kr.onwork.approval.service.ApprovalRoutingService;
 import kr.onwork.common.domain.Department;
 import kr.onwork.common.domain.Role;
 import kr.onwork.common.domain.User;
@@ -24,6 +27,8 @@ import kr.onwork.hr.dto.ChangeRequestResponse;
 import kr.onwork.hr.dto.CreateChangeRequestRequest;
 import kr.onwork.hr.dto.DepartmentResponse;
 import kr.onwork.hr.dto.EmployeeResponse;
+import kr.onwork.hr.dto.HrBatchProcessRequest;
+import kr.onwork.hr.dto.HrBatchProcessResponse;
 import kr.onwork.hr.dto.ProcessRequest;
 import kr.onwork.hr.repository.EmployeeChangeHistoryRepository;
 import kr.onwork.hr.repository.HrChangeRequestRepository;
@@ -52,6 +57,7 @@ public class HrService {
     private final WorkGroupRepository workGroupRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
+    private final ApprovalRoutingService approvalRoutingService;
 
     public HrService(HrChangeRequestRepository changeRequestRepository,
                      EmployeeChangeHistoryRepository historyRepository,
@@ -60,7 +66,8 @@ public class HrService {
                      DepartmentRepository departmentRepository,
                      WorkGroupRepository workGroupRepository,
                      PasswordEncoder passwordEncoder,
-                     NotificationService notificationService) {
+                     NotificationService notificationService,
+                     ApprovalRoutingService approvalRoutingService) {
         this.changeRequestRepository = changeRequestRepository;
         this.historyRepository = historyRepository;
         this.userRepository = userRepository;
@@ -69,6 +76,7 @@ public class HrService {
         this.workGroupRepository = workGroupRepository;
         this.passwordEncoder = passwordEncoder;
         this.notificationService = notificationService;
+        this.approvalRoutingService = approvalRoutingService;
     }
 
     // ---------------------------------------------------------------- 요청 등록 (즉시 PENDING)
@@ -80,6 +88,8 @@ public class HrService {
                         req.payload(), req.reason(), principal.userId()));
         // 승인자(경영진)에게 알림 — UC-HR-01/03 사후조건
         notifyApprovers(saved);
+        approvalRoutingService.open(ApprovalRoutingService.TYPE_HR, saved.getId(),
+                principal.userId(), null, departmentIdOf(principal.userId()));
         return ChangeRequestResponse.from(saved);
     }
 
@@ -222,6 +232,8 @@ public class HrService {
                 throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "반려 사유는 필수입니다");
             }
             request.reject(principal.userId(), req.reason());
+            approvalRoutingService.complete(ApprovalRoutingService.TYPE_HR, request.getId(),
+                    principal.userId(), "REJECT", req.reason());
             notificationService.notify(request.getRequestedBy(), NotificationService.HR_CHANGE_REJECTED,
                     "HR", request.getId(), "인사 변경 요청이 반려되었습니다: " + req.reason());
             return ChangeRequestResponse.from(request);
@@ -230,9 +242,39 @@ public class HrService {
         // APPROVE — change_type별 실데이터 반영
         applyApproval(request, principal.userId());
         request.approve(principal.userId());
+        approvalRoutingService.complete(ApprovalRoutingService.TYPE_HR, request.getId(),
+                principal.userId(), "APPROVE", null);
         notificationService.notify(request.getRequestedBy(), NotificationService.HR_CHANGE_APPROVED,
                 "HR", request.getId(), "인사 변경 요청이 승인되었습니다");
         return ChangeRequestResponse.from(request);
+    }
+
+    @Transactional
+    public HrBatchProcessResponse batchProcess(AuthPrincipal principal, HrBatchProcessRequest req) {
+        UUID batchId = UUID.randomUUID();
+        List<HrBatchProcessResponse.Result> results = new ArrayList<>();
+        int success = 0;
+        int failure = 0;
+        for (Long id : req.ids()) {
+            try {
+                HrChangeRequest target = changeRequestRepository.findById(id)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+                target.assignBatch(batchId.toString());
+                process(principal, id, new ProcessRequest(ProcessRequest.Action.APPROVE, null));
+                results.add(new HrBatchProcessResponse.Result(id, true, null));
+                success++;
+            } catch (BusinessException e) {
+                results.add(new HrBatchProcessResponse.Result(id, false,
+                        e.getErrorCode().name() + ": " + e.getMessage()));
+                failure++;
+            } catch (RuntimeException e) {
+                results.add(new HrBatchProcessResponse.Result(id, false, e.getMessage()));
+                failure++;
+            }
+        }
+        log.info("[HR batch] batchId={} approver={} total={} success={} failure={}",
+                batchId, principal.userId(), req.ids().size(), success, failure);
+        return new HrBatchProcessResponse(batchId, req.ids().size(), success, failure, results);
     }
 
     private void applyApproval(HrChangeRequest request, Long approverId) {
@@ -349,6 +391,13 @@ public class HrService {
         m.put("status", u.getStatus().name());
         m.put("department_id", u.getDepartment() != null ? u.getDepartment().getId() : null);
         return m;
+    }
+
+    private Long departmentIdOf(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getDepartment)
+                .map(Department::getId)
+                .orElse(null);
     }
 
     private Department resolveDepartment(Object idObj) {

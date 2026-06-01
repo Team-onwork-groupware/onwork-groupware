@@ -94,6 +94,7 @@ CREATE TABLE approvals (
     CONSTRAINT fk_appr_dept      FOREIGN KEY (department_id) REFERENCES departments(id)
 );
 CREATE INDEX idx_appr_status_dept ON approvals(status, department_id);
+CREATE UNIQUE INDEX uq_appr_type_ref ON approvals(type, ref_id);
 
 -- ============================================================ 인사 (HR)
 CREATE TABLE hr_change_requests (
@@ -180,6 +181,7 @@ CREATE TABLE monthly_summaries (
     late_count        INT         NOT NULL DEFAULT 0,
     early_leave_count INT         NOT NULL DEFAULT 0,
     absent_count      INT         NOT NULL DEFAULT 0,
+    total_overtime_minutes INT    NOT NULL DEFAULT 0,
     closed_by         BIGINT      NOT NULL,                -- 팀장
     closed_at         TIMESTAMP   NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_ms_user   FOREIGN KEY (user_id)   REFERENCES users(id),

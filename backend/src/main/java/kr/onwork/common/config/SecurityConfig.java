@@ -88,11 +88,12 @@ public class SecurityConfig {
 
     /**
      * CORS — onwork.cors.allowed-origins(콤마 구분) 환경변수로 제어.
-     * 로컬: localhost:5173/5174 / 운영: Vercel 도메인. ONWORK_CORS_ORIGINS=https://onwork-xxx.vercel.app
+     * 로컬: localhost/127.0.0.1 5173/5174 / 운영: Vercel 도메인.
+     * ONWORK_CORS_ORIGINS=https://onwork-xxx.vercel.app
      */
     @Bean
     org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource(
-            @org.springframework.beans.factory.annotation.Value("${onwork.cors.allowed-origins:http://localhost:5173,http://localhost:5174}")
+            @org.springframework.beans.factory.annotation.Value("${onwork.cors.allowed-origins:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}")
             String allowedOrigins) {
         var config = new org.springframework.web.cors.CorsConfiguration();
         config.setAllowedOrigins(java.util.Arrays.stream(allowedOrigins.split(","))

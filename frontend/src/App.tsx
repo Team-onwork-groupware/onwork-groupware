@@ -6,6 +6,7 @@ import HrPage from './pages/HrPage'
 import AttendancePage from './pages/AttendancePage'
 import LeavePage from './pages/LeavePage'
 import ApprovalsPage from './pages/ApprovalsPage'
+import { APPROVER_ROLES } from './lib/roles'
 
 export default function App() {
   return (
@@ -47,7 +48,7 @@ export default function App() {
       <Route
         path="/approvals"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={APPROVER_ROLES}>
             <ApprovalsPage />
           </ProtectedRoute>
         }

@@ -14,5 +14,7 @@ public interface DailyWorkRecordRepository extends JpaRepository<DailyWorkRecord
 
     List<DailyWorkRecord> findByUserIdInAndDate(List<Long> userIds, LocalDate date);
 
+    List<DailyWorkRecord> findByUserIdInAndDateBetween(List<Long> userIds, LocalDate from, LocalDate to);
+
     List<DailyWorkRecord> findByUserIdAndDateBetweenOrderByDateDesc(Long userId, LocalDate from, LocalDate to);
 }

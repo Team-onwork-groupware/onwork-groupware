@@ -11,12 +11,16 @@
 | 2026-05-23 | Phase 5: 결재·알림·온보딩·대시보드 | Done | 통합 결재함(approvals 집계), 알림 목록/읽음, 온보딩 투어, 대시보드 요약 위젯 + 알림배지. E2E |
 | 2026-05-23 | Phase 6: 통합검증·CI·추적성 | Done | ArchUnit 레이어 4규칙 + 도메인 13 + contextLoads 통과, CI(PG16+Redis7 서비스·스키마/시드·gradle test·프론트 build), docs/추적성_매핑.md, README 갱신 |
 | 2026-05-23 | **전체 6단계 완료** | Done | Auth·HR·근태·휴가·결재/알림/온보딩/대시보드 풀스택 + 통합검증. 모든 ADR 동작 입증 |
+| 2026-06-01 | DevAuto 0529 보완 실행 착수 | In Progress | DevAuto 템플릿 validate pass. OnWork validate는 README `실행` 섹션 누락으로 fail 확인 후 DevAuto 실행 계획/입력 산출물 갱신 중 |
+| 2026-06-01 | DevAuto 검증 | Done | `python3 -m devauto validate <onwork>` 통과: 122 checks |
+| 2026-06-01 | 프로젝트 기준선 검증 | Done | Docker Desktop 시작 후 `docker compose up -d`, `./gradlew test` 통과. hooks lint 5건 수정 후 `npm run lint` 통과. `npm run build` 통과 |
+| 2026-06-01 | 0529 canonical API 1차 구현 | Done | 전역 `snake_case`, HR batch-process, 근태 canonical aliases/monthly summary/Asia-Seoul Clock, 휴가 canonical routes/cancel-approved/grants/summary, approvals canonical process, onboarding tutorials API/UI, 결재 상세 drawer/HR 직원 상세 drawer 반영 |
+| 2026-06-01 | 역할별 화면 분기 및 0529 재점검 | Done | 직원은 `마이페이지` 중심으로 결재함 숨김 및 `/approvals` 직접 접근 차단, 매니저는 `팀원`, HR/임원은 `인사` 화면으로 분리. `docs/추적성_매핑.md`에 PDF/녹음 피드백 대비 반영·잔여 항목 재정리. `npm run lint`, `npm run build`, `./gradlew test --rerun-tasks`, DevAuto validate, 브라우저 역할 스모크 통과 |
 
 ## 다음 세션 재개 가이드
 - 인프라: `cd onwork && docker compose up -d` (PostgreSQL 5432 / Redis 6379, 스키마·시드 자동)
 - 백엔드: `cd backend && ./gradlew bootRun` → :8080 / 시드 비번 전원 `onwork1234!`
 - 프론트: `cd frontend && npm run dev` → :5173
 - 검증 계정: daehan@onwork.kr(CEO), jisoo@onwork.kr(HR_MANAGER), hyunjun@onwork.kr(MANAGER 개발팀), haeun@onwork.kr(EMPLOYEE)
-- 패턴: 엔티티(common.domain/<module>.domain) → 리포지토리 → Service(@Transactional, BusinessException+ErrorCode) → Controller(@PreAuthorize, SecurityUtil.currentPrincipal) → 프론트(AppLayout+api+data-testid) → curl/브라우저 E2E → 커밋
-- **다음 작업: Phase 4 휴가** — leave_types/leave_balances/leave_requests/holidays 엔티티+리포지토리, LeaveService(휴가 신청 UC-LEAVE-01: 잔여일수 검증·기간 중복 검증·신청 시점엔 차감 보류, **2단계 승인+대행 ADR-003: 팀장→인사/경영 순차, 부재 시 대행 결재자**, 최종 승인 시점에만 leave_balances 차감, 반려/취소 시 롤백), 휴가 잔여 조회, 휴가 결재함, LeaveController /api/v1/leave/*, 프론트 휴가화면(신청 폼+잔여+결재함). 연차 부여는 입사일/회계연도 기준(배치 또는 조회시 계산). schema.sql에서 leave_* 테이블 컬럼 확인 후 매핑. 스펙 갭은 questions.md 참고.
-- 이후: Phase 5(결재함 통합 approvals·알림 목록/읽음·온보딩 onboarding_tasks·대시보드 위젯), Phase 6(JUnit 슬라이스+ArchUnit 레이어 규칙, GitHub Actions CI, OnWork_추적성체크리스트 대조).
+- 패턴: DevAuto `plan.md` → `inputs/`/`usecases/` → API/DB/프론트 구현 → test-agent → qa-frontend-agent → docs-agent → git-history-agent
+- **다음 작업: 잔여 0529 보완** — 근태 이상 유형 보정/월마감 잠금, 물리 `approvals` 라우팅 테이블 동기화, p95/p99 성능 스크립트와 보고서를 보강한다.

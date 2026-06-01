@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import kr.onwork.approval.dto.ApprovalItem;
+import kr.onwork.approval.dto.ApprovalProcessRequest;
 import kr.onwork.approval.dto.BatchProcessRequest;
 import kr.onwork.approval.dto.BatchProcessResponse;
 import kr.onwork.attendance.dto.AttendanceProcessRequest;
@@ -100,6 +101,17 @@ public class ApprovalService {
             }
         }
         return new BatchProcessResponse(req.items().size(), ok, fail, results);
+    }
+
+    @Transactional
+    public void process(AuthPrincipal principal, Long id, ApprovalProcessRequest req) {
+        dispatch(principal, req.type(), id, toBatchAction(req.action()), req.reason());
+    }
+
+    private BatchProcessRequest.Action toBatchAction(ApprovalProcessRequest.Action action) {
+        return action == ApprovalProcessRequest.Action.APPROVE
+                ? BatchProcessRequest.Action.APPROVE
+                : BatchProcessRequest.Action.REJECT;
     }
 
     private void dispatch(AuthPrincipal principal, String type, Long id,

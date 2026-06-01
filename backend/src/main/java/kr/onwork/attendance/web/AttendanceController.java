@@ -2,11 +2,14 @@ package kr.onwork.attendance.web;
 
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import kr.onwork.attendance.dto.AnomalyResponse;
+import kr.onwork.attendance.dto.AnomalyConfirmRequest;
 import kr.onwork.attendance.dto.AttendanceProcessRequest;
 import kr.onwork.attendance.dto.ClockResponse;
+import kr.onwork.attendance.dto.MonthlySummaryRequest;
 import kr.onwork.attendance.dto.OvertimeCreateRequest;
 import kr.onwork.attendance.dto.OvertimeResponse;
 import kr.onwork.attendance.service.AttendanceService;
@@ -43,8 +46,18 @@ public class AttendanceController {
         return attendanceService.clockOut(SecurityUtil.currentPrincipal());
     }
 
+    @PatchMapping("/clock-out")
+    public ClockResponse patchClockOut() {
+        return attendanceService.clockOut(SecurityUtil.currentPrincipal());
+    }
+
     @GetMapping("/today")
     public ClockResponse today() {
+        return attendanceService.today(SecurityUtil.currentPrincipal());
+    }
+
+    @GetMapping("/me")
+    public ClockResponse me() {
         return attendanceService.today(SecurityUtil.currentPrincipal());
     }
 
@@ -58,8 +71,9 @@ public class AttendanceController {
     }
 
     @PatchMapping("/anomalies/{id}/confirm")
-    public void confirmAnomaly(@PathVariable Long id) {
-        attendanceService.confirmAnomaly(SecurityUtil.currentPrincipal(), id);
+    public AnomalyResponse confirmAnomaly(@PathVariable Long id,
+                                          @RequestBody(required = false) AnomalyConfirmRequest req) {
+        return attendanceService.confirmAnomaly(SecurityUtil.currentPrincipal(), id, req);
     }
 
     /** 시간외근로 신청. */
@@ -68,8 +82,19 @@ public class AttendanceController {
         return attendanceService.requestOvertime(SecurityUtil.currentPrincipal(), req);
     }
 
+    @PostMapping("/overtime-requests")
+    public OvertimeResponse requestOvertimeCanonical(@Valid @RequestBody OvertimeCreateRequest req) {
+        return attendanceService.requestOvertime(SecurityUtil.currentPrincipal(), req);
+    }
+
     @GetMapping("/overtime")
     public Map<String, Object> myOvertime() {
+        List<OvertimeResponse> items = attendanceService.myOvertime(SecurityUtil.currentPrincipal());
+        return Map.of("total", items.size(), "items", items);
+    }
+
+    @GetMapping("/overtime-requests")
+    public Map<String, Object> myOvertimeCanonical() {
         List<OvertimeResponse> items = attendanceService.myOvertime(SecurityUtil.currentPrincipal());
         return Map.of("total", items.size(), "items", items);
     }
@@ -83,9 +108,35 @@ public class AttendanceController {
     }
 
     @PreAuthorize("hasRole('MANAGER')")
+    @GetMapping("/overtime-requests/inbox")
+    public Map<String, Object> overtimeInboxCanonical() {
+        List<OvertimeResponse> items = attendanceService.overtimeInbox(SecurityUtil.currentPrincipal());
+        return Map.of("total", items.size(), "items", items);
+    }
+
+    @PreAuthorize("hasRole('MANAGER')")
     @PatchMapping("/overtime/{id}/process")
     public OvertimeResponse processOvertime(@PathVariable Long id, @Valid @RequestBody AttendanceProcessRequest req) {
         return attendanceService.processOvertime(SecurityUtil.currentPrincipal(), id, req);
+    }
+
+    @PreAuthorize("hasRole('MANAGER')")
+    @PatchMapping("/overtime-requests/{id}/process")
+    public OvertimeResponse processOvertimeCanonical(@PathVariable Long id,
+                                                     @Valid @RequestBody AttendanceProcessRequest req) {
+        return attendanceService.processOvertime(SecurityUtil.currentPrincipal(), id, req);
+    }
+
+    @PreAuthorize("hasRole('MANAGER')")
+    @PostMapping("/monthly-summaries")
+    public Map<String, Object> monthlySummaries(
+            @RequestBody(required = false) MonthlySummaryRequest req,
+            @RequestParam(name = "year_month", required = false) String yearMonth) {
+        if (req != null) {
+            return attendanceService.closeMonthlySummary(SecurityUtil.currentPrincipal(), req);
+        }
+        YearMonth target = yearMonth != null ? YearMonth.parse(yearMonth) : YearMonth.now();
+        return attendanceService.monthlySummary(SecurityUtil.currentPrincipal(), target);
     }
 
     /** 운영용: 결근 감지 배치 수동 재실행 (스케줄러와 동일 로직, ADR-ATT-001). CEO 전용. */

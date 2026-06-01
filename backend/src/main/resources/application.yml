@@ -1,6 +1,9 @@
 spring:
   application:
     name: onwork
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    time-zone: Asia/Seoul
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/onwork}
     username: ${SPRING_DATASOURCE_USERNAME:onwork}
@@ -31,4 +34,4 @@ onwork:
     access-token-validity-minutes: ${ONWORK_JWT_ACCESS_MIN:30}
     refresh-token-validity-days: ${ONWORK_JWT_REFRESH_DAYS:7}
   cors:
-    allowed-origins: ${ONWORK_CORS_ORIGINS:http://localhost:5173,http://localhost:5174}
+    allowed-origins: ${ONWORK_CORS_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}

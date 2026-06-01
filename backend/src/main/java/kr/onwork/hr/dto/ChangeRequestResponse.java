@@ -15,7 +15,8 @@ public record ChangeRequestResponse(
         Long requestedBy,
         Long approverId,
         String rejectReason,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String batchId
 ) {
     public static ChangeRequestResponse from(HrChangeRequest r) {
         return new ChangeRequestResponse(
@@ -28,7 +29,8 @@ public record ChangeRequestResponse(
                 r.getRequestedBy(),
                 r.getApproverId(),
                 r.getRejectReason(),
-                r.getCreatedAt()
+                r.getCreatedAt(),
+                r.getBatchId()
         );
     }
 }

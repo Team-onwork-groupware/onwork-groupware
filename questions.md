@@ -14,6 +14,6 @@
 
 | ID | Asked by | Status | Question | Answer |
 |---|---|---|---|---|
-| Q-001 | requirement-analyzer | OPEN | `users` 테이블에 RBAC 권한(`role`: CEO/VP/HR_MANAGER/MANAGER/EMPLOYEE)과 직급(`position`: 과장/대리 등)이 데이터사전엔 없으나 API 응답·RBAC·조직도가 요구함. 두 컬럼을 추가했는데, 팀의 의도와 일치하는가? (별도 테이블 분리 vs users 컬럼) | |
-| Q-002 | requirement-analyzer | OPEN | 일정(Schedule) 모듈은 발표 nav엔 있으나 유스케이스·데이터사전·API에 미명세. v1 범위에서 제외했는데 맞는가? 포함이면 스펙 보강 필요. | |
-| Q-003 | requirement-analyzer | OPEN | DB가 데이터사전은 MySQL 표기(BIGINT AUTO_INCREMENT)인데 확정 아키텍처는 PostgreSQL. PostgreSQL 기준(IDENTITY/JSONB)으로 변환했는데 맞는가? | |
+| Q-001 | requirement-analyzer | RESOLVED | `users` 테이블에 RBAC 권한(`role`: CEO/VP/HR_MANAGER/MANAGER/EMPLOYEE)과 직급(`position`: 과장/대리 등)이 데이터사전엔 없으나 API 응답·RBAC·조직도가 요구함. 두 컬럼을 추가했는데, 팀의 의도와 일치하는가? (별도 테이블 분리 vs users 컬럼) | 0529 보완 실행 기본 가정으로 유지. API/RBAC 구현과 발표 조직도 요구가 우선이다. |
+| Q-002 | requirement-analyzer | RESOLVED | 일정(Schedule) 모듈은 발표 nav엔 있으나 유스케이스·데이터사전·API에 미명세. v1 범위에서 제외했는데 맞는가? 포함이면 스펙 보강 필요. | v1 0529 정합화 범위에서는 제외. 연구실 통합 플랫폼 v2에서 재검토한다. |
+| Q-003 | requirement-analyzer | RESOLVED | DB가 데이터사전은 MySQL 표기(BIGINT AUTO_INCREMENT)인데 확정 아키텍처는 PostgreSQL. PostgreSQL 기준(IDENTITY/JSONB)으로 변환했는데 맞는가? | PostgreSQL 16 기준 유지. 데이터사전의 MySQL 표기는 논리 스키마로 해석한다. |

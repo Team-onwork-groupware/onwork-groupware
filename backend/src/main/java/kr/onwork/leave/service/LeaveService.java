@@ -3,9 +3,11 @@ package kr.onwork.leave.service;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import kr.onwork.approval.service.ApprovalRoutingService;
 import kr.onwork.common.domain.Role;
 import kr.onwork.common.domain.User;
 import kr.onwork.common.error.BusinessException;
@@ -20,6 +22,8 @@ import kr.onwork.leave.domain.LeaveRequest;
 import kr.onwork.leave.domain.LeaveStatus;
 import kr.onwork.leave.domain.LeaveType;
 import kr.onwork.leave.dto.LeaveBalanceResponse;
+import kr.onwork.leave.dto.LeaveGrantRequest;
+import kr.onwork.leave.dto.LeaveGrantResponse;
 import kr.onwork.leave.dto.LeaveProcessRequest;
 import kr.onwork.leave.dto.LeaveRequestCreate;
 import kr.onwork.leave.dto.LeaveRequestResponse;
@@ -46,6 +50,7 @@ public class LeaveService {
     private final LeaveHistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final ApprovalRoutingService approvalRoutingService;
 
     public LeaveService(LeaveRequestRepository requestRepository,
                         LeaveBalanceRepository balanceRepository,
@@ -53,7 +58,8 @@ public class LeaveService {
                         LeaveApproverRepository approverRepository,
                         LeaveHistoryRepository historyRepository,
                         UserRepository userRepository,
-                        NotificationService notificationService) {
+                        NotificationService notificationService,
+                        ApprovalRoutingService approvalRoutingService) {
         this.requestRepository = requestRepository;
         this.balanceRepository = balanceRepository;
         this.typeRepository = typeRepository;
@@ -61,6 +67,7 @@ public class LeaveService {
         this.historyRepository = historyRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.approvalRoutingService = approvalRoutingService;
     }
 
     // ---------------------------------------------------------------- 잔여 조회
@@ -118,6 +125,8 @@ public class LeaveService {
         if (approverId != null) {
             notificationService.notify(approverId, NotificationService.LEAVE_REQUESTED,
                     "LEAVE", saved.getId(), "새 휴가 신청이 결재 대기 중입니다");
+            approvalRoutingService.open(ApprovalRoutingService.TYPE_LEAVE, saved.getId(),
+                    principal.userId(), approverId, departmentIdOf(principal.userId()));
         }
         return LeaveRequestResponse.of(saved, nameOf(principal.userId()));
     }
@@ -194,6 +203,8 @@ public class LeaveService {
                 throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "보류 사유는 필수입니다");
             }
             request.hold(principal.userId(), req.reason());
+            approvalRoutingService.complete(ApprovalRoutingService.TYPE_LEAVE, request.getId(),
+                    principal.userId(), "ON_HOLD", req.reason());
             notificationService.notify(request.getUserId(), NotificationService.LEAVE_ON_HOLD,
                     "LEAVE", request.getId(), "휴가 신청이 보류되었습니다: " + req.reason());
             return LeaveRequestResponse.of(request, nameOf(request.getUserId()));
@@ -210,6 +221,8 @@ public class LeaveService {
         historyRepository.save(LeaveHistory.of(balance.getId(), request.getId(), LeaveChangeType.USE,
                 request.getDaysUsed().negate(), before, balance.remaining(), principal.userId()));
         request.approve(principal.userId(), delegated);
+        approvalRoutingService.complete(ApprovalRoutingService.TYPE_LEAVE, request.getId(),
+                principal.userId(), "APPROVE", null);
         notificationService.notify(request.getUserId(), NotificationService.LEAVE_APPROVED,
                 "LEAVE", request.getId(), "휴가 신청이 승인되었습니다" + (delegated ? " (대행 결재)" : ""));
         return LeaveRequestResponse.of(request, nameOf(request.getUserId()));
@@ -227,15 +240,83 @@ public class LeaveService {
             throw new BusinessException(ErrorCode.ALREADY_PROCESSED, "이미 취소된 신청입니다");
         }
         if (request.getStatus() == LeaveStatus.APPROVED) {
-            LeaveBalance balance = balanceRepository.findById(request.getLeaveBalanceId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_BALANCE_NOT_FOUND));
-            BigDecimal before = balance.remaining();
-            balance.restore(request.getDaysUsed());
-            historyRepository.save(LeaveHistory.of(balance.getId(), request.getId(), LeaveChangeType.CANCEL,
-                    request.getDaysUsed(), before, balance.remaining(), principal.userId()));
+            throw new BusinessException(ErrorCode.FORBIDDEN, "승인된 휴가는 승인자 취소 API로만 취소할 수 있습니다");
         }
         request.cancel();
+        approvalRoutingService.cancel(ApprovalRoutingService.TYPE_LEAVE, request.getId(), "신청자 취소");
         return LeaveRequestResponse.of(request, nameOf(request.getUserId()));
+    }
+
+    @Transactional
+    public LeaveRequestResponse cancelApproved(AuthPrincipal principal, Long id) {
+        LeaveRequest request = requestRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (request.getUserId().equals(principal.userId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "승인자는 본인 신청을 취소할 수 없습니다");
+        }
+        if (request.getStatus() != LeaveStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.INVALID_PAYLOAD, "승인된 휴가만 승인자 취소할 수 있습니다");
+        }
+        requireLeaveApprover(principal, request.getUserId());
+
+        LeaveBalance balance = balanceRepository.findById(request.getLeaveBalanceId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_BALANCE_NOT_FOUND));
+        BigDecimal before = balance.remaining();
+        balance.restore(request.getDaysUsed());
+        historyRepository.save(LeaveHistory.of(balance.getId(), request.getId(), LeaveChangeType.CANCEL,
+                request.getDaysUsed(), before, balance.remaining(), principal.userId()));
+        request.cancel();
+        notificationService.notify(request.getUserId(), NotificationService.LEAVE_CANCELLED,
+                "LEAVE", request.getId(), "승인된 휴가가 승인자에 의해 취소되었습니다");
+        return LeaveRequestResponse.of(request, nameOf(request.getUserId()));
+    }
+
+    @Transactional
+    public LeaveGrantResponse grantCompLeave(AuthPrincipal principal, LeaveGrantRequest req) {
+        short year = (short) (req.year() != null ? req.year() : LocalDate.now().getYear());
+        LeaveType comp = typeRepository.findByCode("COMP")
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "보상휴가 유형이 없습니다"));
+        List<LeaveGrantResponse.Result> results = new ArrayList<>();
+        int success = 0;
+        int failure = 0;
+        for (Long userId : req.userIds()) {
+            try {
+                userRepository.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+                LeaveBalance balance = balanceRepository.findByUserIdAndLeaveTypeIdAndYear(userId, comp.getId(), year)
+                        .orElseGet(() -> balanceRepository.save(
+                                LeaveBalance.create(userId, comp.getId(), BigDecimal.ZERO, year)));
+                BigDecimal before = balance.remaining();
+                balance.grant(req.days());
+                historyRepository.save(LeaveHistory.of(balance.getId(), null, LeaveChangeType.GRANT,
+                        req.days(), before, balance.remaining(), principal.userId()));
+                notificationService.notify(userId, NotificationService.LEAVE_GRANTED,
+                        "LEAVE", null, "보상휴가 " + req.days() + "일이 부여되었습니다");
+                results.add(new LeaveGrantResponse.Result(userId, true, null));
+                success++;
+            } catch (BusinessException e) {
+                results.add(new LeaveGrantResponse.Result(userId, false,
+                        e.getErrorCode().name() + ": " + e.getMessage()));
+                failure++;
+            } catch (RuntimeException e) {
+                results.add(new LeaveGrantResponse.Result(userId, false, e.getMessage()));
+                failure++;
+            }
+        }
+        return new LeaveGrantResponse(req.userIds().size(), success, failure, results);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> summary(AuthPrincipal principal) {
+        List<LeaveRequestResponse> mine = myRequests(principal);
+        List<LeaveRequestResponse> pending = inbox(principal);
+        long approved = mine.stream().filter(r -> r.status().equals(LeaveStatus.APPROVED.name())).count();
+        long onHold = mine.stream().filter(r -> r.status().equals(LeaveStatus.ON_HOLD.name())).count();
+        return Map.of(
+                "my_total", mine.size(),
+                "my_approved", approved,
+                "my_on_hold", onHold,
+                "pending_approval", pending.size()
+        );
     }
 
     // ---------------------------------------------------------------- helpers
@@ -282,7 +363,25 @@ public class LeaveService {
         return la != null ? la.activeApproverId() : null;
     }
 
+    private void requireLeaveApprover(AuthPrincipal principal, Long requesterId) {
+        if (principal.role() == Role.CEO || principal.role() == Role.VP) {
+            return;
+        }
+        LeaveApprover la = approverOf(requesterId);
+        if (la != null && la.activeApproverId().equals(principal.userId())) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.FORBIDDEN, "이 휴가를 취소할 권한이 없습니다");
+    }
+
     private String nameOf(Long userId) {
         return userRepository.findById(userId).map(User::getName).orElse("?");
+    }
+
+    private Long departmentIdOf(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getDepartment)
+                .map(department -> department.getId())
+                .orElse(null);
     }
 }
