@@ -106,6 +106,7 @@ function roleHomeLabel(role?: string | null) {
 
 function attendanceTone(summary: Summary | null): Tone {
   if (!summary) return 'slate'
+  if (summary.attendanceStatus === 'LEAVE') return 'blue'
   if (summary.attendanceStatus === 'ANOMALY') return 'rose'
   if (summary.clockedIn && !summary.clockOutAt) return 'green'
   if (summary.clockOutAt) return 'blue'
@@ -186,7 +187,7 @@ export default function DashboardPage() {
     }
   }
 
-  const attendanceText = !s ? '-' : s.clockOutAt ? '퇴근 완료' : s.clockedIn ? '근무 중' : '미출근'
+  const attendanceText = !s ? '-' : s.attendanceStatus === 'LEAVE' ? '휴가' : s.clockOutAt ? '퇴근 완료' : s.clockedIn ? '근무 중' : '미출근'
   const tone = attendanceTone(s)
   const pendingCount = s?.pendingApprovals ?? 0
   const unreadCount = s?.unreadNotifications ?? 0
@@ -231,7 +232,7 @@ export default function DashboardPage() {
         </section>
 
         <section className="metric-grid" aria-label="오늘 요약">
-          <MetricCard label="오늘 근태" value={attendanceText} hint={s?.attendanceStatus === 'ANOMALY' ? '이상 있음' : 'Asia/Seoul 기준'} tone={tone} icon="clock" />
+          <MetricCard label="오늘 근태" value={attendanceText} hint={s?.attendanceStatus === 'LEAVE' ? '오늘 휴가' : s?.attendanceStatus === 'ANOMALY' ? '이상 있음' : 'Asia/Seoul 기준'} tone={tone} icon="clock" />
           <MetricCard label="연차 잔여" value={s ? `${s.annualRemaining}일` : '-'} hint={s ? `총 ${s.annualTotal} · 사용 ${s.annualUsed}` : ''} tone="green" icon="leave" />
           <MetricCard label="결재 대기" value={pendingCount} hint="내가 처리할 결재" tone={pendingCount > 0 ? 'blue' : 'slate'} icon="approval" />
           <MetricCard label="읽지 않은 알림" value={unreadCount} hint={unreadCount > 0 ? '확인 필요' : '모두 확인'} tone={unreadCount > 0 ? 'rose' : 'slate'} icon="bell" />

@@ -9,6 +9,7 @@ public record OvertimeResponse(
         Long id,
         Long userId,
         String userName,
+        String userDepartment,
         LocalDate requestDate,
         LocalDateTime expectedStartAt,
         LocalDateTime expectedEndAt,
@@ -20,15 +21,20 @@ public record OvertimeResponse(
         ApproverView approver
 ) {
     public static OvertimeResponse from(OvertimeRequest r) {
-        return from(r, null, null);
+        return from(r, null, null, null);
     }
 
     public static OvertimeResponse from(OvertimeRequest r, String userName) {
-        return from(r, userName, null);
+        return from(r, userName, null, null);
     }
 
     public static OvertimeResponse from(OvertimeRequest r, String userName, ApproverView approver) {
-        return new OvertimeResponse(r.getId(), r.getUserId(), userName, r.getRequestDate(),
+        return from(r, userName, null, approver);
+    }
+
+    public static OvertimeResponse from(OvertimeRequest r, String userName, String userDepartment,
+                                        ApproverView approver) {
+        return new OvertimeResponse(r.getId(), r.getUserId(), userName, userDepartment, r.getRequestDate(),
                 r.getExpectedStartAt(), r.getExpectedEndAt(), r.getReason(),
                 r.getStatus().name(), r.getApproverId(), r.getRejectReason(), r.getCreatedAt(), approver);
     }

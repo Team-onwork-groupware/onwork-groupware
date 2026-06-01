@@ -1,6 +1,5 @@
 package kr.onwork.common.service;
 
-import kr.onwork.common.domain.Role;
 import kr.onwork.common.domain.User;
 import kr.onwork.common.dto.ApproverView;
 import kr.onwork.common.repository.UserRepository;
@@ -47,21 +46,10 @@ public class ApproverViewFactory {
         return userRepository.findById(userId).map(User::getName).orElse(null);
     }
 
-    /** "부서명 직급" 형태. 부서 없으면 직급만, 직급 비면 역할명으로 대체. */
+    /** "부서명 직급" 형태. 직급은 사원/팀장으로 통일된 표시값(User.displayPosition). 부서 없으면 직급만. */
     private String labelOf(User u) {
         String dept = u.getDepartment() != null ? u.getDepartment().getName() : null;
-        String pos = (u.getPosition() != null && !u.getPosition().isBlank())
-                ? u.getPosition() : roleLabel(u.getRole());
+        String pos = u.displayPosition();
         return dept != null ? dept + " " + pos : pos;
-    }
-
-    private String roleLabel(Role role) {
-        return switch (role) {
-            case CEO -> "대표이사";
-            case VP -> "경영진";
-            case HR_MANAGER -> "경영지원팀장";
-            case MANAGER -> "팀장";
-            case EMPLOYEE -> "사원";
-        };
     }
 }

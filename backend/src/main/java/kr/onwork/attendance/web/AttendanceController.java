@@ -10,6 +10,7 @@ import kr.onwork.attendance.dto.AnomalyConfirmRequest;
 import kr.onwork.attendance.dto.AttendanceProcessRequest;
 import kr.onwork.attendance.dto.ClockResponse;
 import kr.onwork.attendance.dto.MonthlySummaryRequest;
+import kr.onwork.attendance.dto.OnLeaveResponse;
 import kr.onwork.attendance.dto.OvertimeCreateRequest;
 import kr.onwork.attendance.dto.OvertimeResponse;
 import kr.onwork.attendance.service.AttendanceService;
@@ -54,6 +55,13 @@ public class AttendanceController {
     @GetMapping("/today")
     public ClockResponse today() {
         return attendanceService.today(SecurityUtil.currentPrincipal());
+    }
+
+    /** 오늘 휴가 중인 직원 목록(같은 부서 범위, 경영진·경영지원팀은 전사). */
+    @GetMapping("/on-leave")
+    public Map<String, Object> onLeave() {
+        List<OnLeaveResponse> items = attendanceService.onLeaveToday(SecurityUtil.currentPrincipal());
+        return Map.of("total", items.size(), "items", items);
     }
 
     @GetMapping("/me")

@@ -16,6 +16,7 @@ interface Balance {
 interface LeaveReq {
   id: number
   userName: string
+  userDepartment?: string | null
   startDate: string
   endDate: string
   daysUsed: number
@@ -340,7 +341,10 @@ export default function LeavePage() {
                 <tbody>
                   {inbox.map((r) => (
                     <tr key={r.id} className="clickable-row" onClick={() => setDetail(r)}>
-                      <td><strong>{r.userName}</strong></td>
+                      <td>
+                        <strong>{r.userName}</strong>
+                        <div className="muted small">{r.userDepartment ?? '미배정'}</div>
+                      </td>
                       <td>{r.startDate} ~ {r.endDate}</td>
                       <td>{r.daysUsed}</td>
                       <td><ApproverCell status={r.status} approver={r.approver} /></td>

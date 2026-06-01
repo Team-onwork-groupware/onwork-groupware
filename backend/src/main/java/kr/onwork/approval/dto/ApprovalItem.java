@@ -9,6 +9,7 @@ public record ApprovalItem(
         Long refId,
         String title,
         String requesterName,
+        String requesterDepartment,
         String summary,
         int ageDays,
         boolean urgent

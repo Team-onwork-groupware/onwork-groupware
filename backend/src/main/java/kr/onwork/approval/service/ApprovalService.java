@@ -58,19 +58,20 @@ public class ApprovalService {
         List<ApprovalItem> items = new ArrayList<>();
 
         leaveService.inbox(principal).forEach(r -> items.add(item(
-                "LEAVE", r.id(), "휴가 신청", r.userName(),
+                "LEAVE", r.id(), "휴가 신청", r.userName(), r.userDepartment(),
                 r.startDate() + " ~ " + r.endDate() + " (" + r.daysUsed() + "일)",
                 r.createdAt())));
 
         attendanceService.overtimeInbox(principal).forEach(r -> items.add(item(
-                "OVERTIME", r.id(), "시간외근로", nameOf(r.userId()),
+                "OVERTIME", r.id(), "시간외근로", r.userName(), r.userDepartment(),
                 r.requestDate() + " " + r.reason(),
                 r.createdAt())));
 
         if (principal.role() == Role.CEO || principal.role() == Role.VP) {
             hrRepository.findByStatusOrderByIdDesc(RequestStatus.PENDING).forEach(r -> items.add(item(
                     "HR", r.getId(), "인사 변경(" + r.getChangeType().name() + ")",
-                    nameOf(r.getRequestedBy()), r.getReason() != null ? r.getReason() : "",
+                    nameOf(r.getRequestedBy()), deptOf(r.getRequestedBy()),
+                    r.getReason() != null ? r.getReason() : "",
                     r.getCreatedAt())));
         }
 
@@ -139,14 +140,20 @@ public class ApprovalService {
 
     // ---------------------------------------------------------------- helpers
     private ApprovalItem item(String type, Long id, String title, String requester,
-                              String summary, LocalDateTime createdAt) {
+                              String requesterDepartment, String summary, LocalDateTime createdAt) {
         long days = createdAt != null
                 ? Math.max(Duration.between(createdAt, LocalDateTime.now()).toDays(), 0L) : 0L;
-        return new ApprovalItem(type, id, title, requester, summary,
+        return new ApprovalItem(type, id, title, requester, requesterDepartment, summary,
                 (int) days, days >= URGENT_DAYS);
     }
 
     private String nameOf(Long userId) {
         return userRepository.findById(userId).map(User::getName).orElse("?");
+    }
+
+    private String deptOf(Long userId) {
+        return userRepository.findById(userId)
+                .map(u -> u.getDepartment() != null ? u.getDepartment().getName() : "미배정")
+                .orElse("미배정");
     }
 }

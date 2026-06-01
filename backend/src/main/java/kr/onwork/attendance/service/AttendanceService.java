@@ -23,6 +23,7 @@ import kr.onwork.attendance.dto.AnomalyResponse;
 import kr.onwork.attendance.dto.AttendanceProcessRequest;
 import kr.onwork.attendance.dto.ClockResponse;
 import kr.onwork.attendance.dto.MonthlySummaryRequest;
+import kr.onwork.attendance.dto.OnLeaveResponse;
 import kr.onwork.attendance.dto.OvertimeCreateRequest;
 import kr.onwork.attendance.dto.OvertimeResponse;
 import kr.onwork.attendance.repository.AttendanceSettingRepository;
@@ -143,9 +144,19 @@ public class AttendanceService {
     @Transactional(readOnly = true)
     public ClockResponse today(AuthPrincipal principal) {
         LocalDate today = LocalDate.now(clock);
-        return recordRepository.findByUserIdAndDate(principal.userId(), today)
-                .map(r -> ClockResponse.from(r, false, false))
-                .orElse(new ClockResponse(null, today, null, null, 0, "NONE", false, false));
+        DailyWorkRecord rec = recordRepository.findByUserIdAndDate(principal.userId(), today).orElse(null);
+        // 오늘 승인된 휴가가 있으면 '휴가' 상태로 표시(출퇴근 기록이 있으면 시각은 보존).
+        if (isOnLeaveToday(principal.userId())) {
+            return new ClockResponse(
+                    rec != null ? rec.getId() : null, today,
+                    rec != null ? rec.getClockInAt() : null,
+                    rec != null ? rec.getClockOutAt() : null,
+                    rec != null ? rec.getOvertimeMinutes() : 0,
+                    "LEAVE", false, false);
+        }
+        return rec != null
+                ? ClockResponse.from(rec, false, false)
+                : new ClockResponse(null, today, null, null, 0, "NONE", false, false);
     }
 
     // ---------------------------------------------------------------- 결근 배치 (ADR-ATT-001)
@@ -180,6 +191,9 @@ public class AttendanceService {
         List<User> scope = scopedUsers(principal);
         Map<Long, String> nameById = scope.stream()
                 .collect(Collectors.toMap(User::getId, User::getName));
+        Map<Long, String> deptById = scope.stream()
+                .collect(Collectors.toMap(User::getId,
+                        u -> u.getDepartment() != null ? u.getDepartment().getName() : "미배정"));
         List<DailyWorkRecord> records = recordRepository.findByUserIdInAndDate(
                 scope.stream().map(User::getId).toList(), date);
         Map<Long, DailyWorkRecord> recordById = records.stream()
@@ -193,6 +207,7 @@ public class AttendanceService {
                     DailyWorkRecord rec = recordById.get(a.getDailyWorkRecordId());
                     return new AnomalyResponse(a.getId(), rec.getUserId(),
                             nameById.getOrDefault(rec.getUserId(), "?"),
+                            deptById.getOrDefault(rec.getUserId(), "미배정"),
                             rec.getDate(), a.getAnomalyType().name(), a.isConfirmed());
                 })
                 .toList();
@@ -218,7 +233,8 @@ public class AttendanceService {
         }
         anomaly.confirm(principal.userId());
         User target = loadUser(record.getUserId());
-        return new AnomalyResponse(anomaly.getId(), record.getUserId(), target.getName(),
+        String dept = target.getDepartment() != null ? target.getDepartment().getName() : "미배정";
+        return new AnomalyResponse(anomaly.getId(), record.getUserId(), target.getName(), dept,
                 record.getDate(), anomaly.getAnomalyType().name(), true);
     }
 
@@ -336,10 +352,15 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public List<OvertimeResponse> overtimeInbox(AuthPrincipal principal) {
-        Map<Long, String> nameById = scopedUsers(principal).stream()
+        List<User> scope = scopedUsers(principal);
+        Map<Long, String> nameById = scope.stream()
                 .collect(Collectors.toMap(User::getId, User::getName));
+        Map<Long, String> deptById = scope.stream()
+                .collect(Collectors.toMap(User::getId,
+                        u -> u.getDepartment() != null ? u.getDepartment().getName() : "미배정"));
         return overtimeRepository.findByUserIdInAndStatusOrderByIdDesc(nameById.keySet().stream().toList(), OvertimeStatus.PENDING)
-                .stream().map(r -> OvertimeResponse.from(r, nameById.get(r.getUserId()), buildOvertimeApprover(r)))
+                .stream().map(r -> OvertimeResponse.from(r, nameById.get(r.getUserId()),
+                        deptById.getOrDefault(r.getUserId(), "미배정"), buildOvertimeApprover(r)))
                 .toList();
     }
 
@@ -379,6 +400,33 @@ public class AttendanceService {
         return execs.stream().filter(u -> u.getRole() == Role.VP).findFirst()
                 .or(() -> execs.stream().findFirst())
                 .map(User::getId).orElse(null);
+    }
+
+    /** 오늘 휴가 중인 직원 목록 — 같은 부서(경영진·경영지원팀은 전사) 범위. */
+    @Transactional(readOnly = true)
+    public List<OnLeaveResponse> onLeaveToday(AuthPrincipal principal) {
+        LocalDate today = LocalDate.now(clock);
+        Map<Long, User> scope = leaveRosterScope(principal).stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+        return leaveRequestRepository.findApprovedActiveOn(today).stream()
+                .filter(r -> scope.containsKey(r.getUserId()))
+                .map(r -> {
+                    User u = scope.get(r.getUserId());
+                    String dept = u.getDepartment() != null ? u.getDepartment().getName() : null;
+                    return new OnLeaveResponse(u.getId(), u.getName(), dept, r.getStartDate(), r.getEndDate());
+                })
+                .toList();
+    }
+
+    /** 휴가 로스터 가시 범위: 경영진/경영지원팀=전사, 그 외=같은 부서(사원도 팀 휴가자를 봄). */
+    private List<User> leaveRosterScope(AuthPrincipal principal) {
+        Role role = principal.role();
+        if (role == Role.CEO || role == Role.VP || role == Role.HR_MANAGER) {
+            return userRepository.search(null, null, null);
+        }
+        User me = loadUser(principal.userId());
+        Long deptId = me.getDepartment() != null ? me.getDepartment().getId() : -1L;
+        return userRepository.search(deptId, null, null);
     }
 
     @Transactional

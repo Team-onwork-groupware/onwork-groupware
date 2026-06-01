@@ -26,6 +26,15 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             """)
     long countActiveLeaveOn(@Param("userId") Long userId, @Param("date") LocalDate date);
 
+    /** 지정일에 승인 휴가로 부재 중인 모든 신청(오늘 휴가자 목록용). */
+    @Query("""
+            select r from LeaveRequest r
+            where r.status = kr.onwork.leave.domain.LeaveStatus.APPROVED
+              and r.startDate <= :date and r.endDate >= :date
+            order by r.startDate, r.userId
+            """)
+    List<LeaveRequest> findApprovedActiveOn(@Param("date") LocalDate date);
+
     /** 기간 중복 검사 — 동일 사용자의 PENDING/APPROVED 신청과 겹치는지. */
     @Query("""
             select count(r) from LeaveRequest r

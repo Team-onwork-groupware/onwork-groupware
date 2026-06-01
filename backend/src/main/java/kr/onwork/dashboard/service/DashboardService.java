@@ -16,6 +16,7 @@ import kr.onwork.dashboard.dto.DashboardSummary;
 import kr.onwork.hr.domain.RequestStatus;
 import kr.onwork.hr.repository.HrChangeRequestRepository;
 import kr.onwork.leave.repository.LeaveBalanceRepository;
+import kr.onwork.leave.repository.LeaveRequestRepository;
 import kr.onwork.leave.service.LeaveService;
 import kr.onwork.notification.service.NotificationService;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class DashboardService {
     private final DailyWorkRecordRepository recordRepository;
     private final WorkAnomalyRepository anomalyRepository;
     private final LeaveBalanceRepository balanceRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
     private final HrChangeRequestRepository hrRepository;
     private final NotificationService notificationService;
     private final LeaveService leaveService;
@@ -39,6 +41,7 @@ public class DashboardService {
     public DashboardService(DailyWorkRecordRepository recordRepository,
                             WorkAnomalyRepository anomalyRepository,
                             LeaveBalanceRepository balanceRepository,
+                            LeaveRequestRepository leaveRequestRepository,
                             HrChangeRequestRepository hrRepository,
                             NotificationService notificationService,
                             LeaveService leaveService,
@@ -47,6 +50,7 @@ public class DashboardService {
         this.recordRepository = recordRepository;
         this.anomalyRepository = anomalyRepository;
         this.balanceRepository = balanceRepository;
+        this.leaveRequestRepository = leaveRequestRepository;
         this.hrRepository = hrRepository;
         this.notificationService = notificationService;
         this.leaveService = leaveService;
@@ -62,6 +66,8 @@ public class DashboardService {
 
         DailyWorkRecord rec = recordRepository.findByUserIdAndDate(uid, today).orElse(null);
         boolean clockedIn = rec != null && rec.hasClockIn();
+        boolean onLeave = leaveRequestRepository.countActiveLeaveOn(uid, today) > 0;
+        String attendanceStatus = onLeave ? "LEAVE" : (rec != null ? rec.getStatus().name() : "NONE");
 
         var balance = balanceRepository
                 .findByUserIdAndLeaveTypeIdAndYear(uid, ANNUAL_TYPE_ID, (short) today.getYear())
@@ -99,7 +105,7 @@ public class DashboardService {
                 clockedIn,
                 rec != null ? rec.getClockInAt() : null,
                 rec != null ? rec.getClockOutAt() : null,
-                rec != null ? rec.getStatus().name() : "NONE",
+                attendanceStatus,
                 total, used, remaining,
                 notificationService.unreadCount(uid),
                 pending,

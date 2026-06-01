@@ -7,6 +7,7 @@ public record AnomalyResponse(
         Long id,
         Long userId,
         String userName,
+        String departmentName,
         LocalDate date,
         String anomalyType,
         boolean confirmed

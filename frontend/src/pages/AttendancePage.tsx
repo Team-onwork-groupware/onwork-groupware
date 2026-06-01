@@ -16,6 +16,7 @@ interface Today {
 interface Anomaly {
   id: number
   userName: string
+  departmentName?: string | null
   date: string
   anomalyType: string
   confirmed: boolean
@@ -24,6 +25,7 @@ interface OvertimeRequest {
   id: number
   userId: number
   userName?: string
+  userDepartment?: string | null
   requestDate: string
   expectedStartAt: string
   expectedEndAt: string
@@ -41,6 +43,14 @@ interface MonthlyCloseResult {
   message?: string
 }
 
+interface OnLeave {
+  userId: number
+  userName: string
+  departmentName?: string | null
+  startDate: string
+  endDate: string
+}
+
 const ANOMALY_LABEL: Record<string, string> = {
   LATE: '지각', EARLY_LEAVE: '조퇴', ABSENT: '결근',
   CLOCK_MISSING: '퇴근누락', UNAPPROVED_OVERTIME: '미승인 시간외',
@@ -54,6 +64,7 @@ function fmtTime(iso: string | null): string {
 }
 
 function statusTone(status?: string) {
+  if (status === 'LEAVE') return 'blue'
   if (status === 'ANOMALY') return 'danger'
   if (status === 'NORMAL') return 'success'
   return 'pending'
@@ -67,6 +78,7 @@ export default function AttendancePage() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [overtimeMine, setOvertimeMine] = useState<OvertimeRequest[]>([])
   const [overtimeInbox, setOvertimeInbox] = useState<OvertimeRequest[]>([])
+  const [onLeaveList, setOnLeaveList] = useState<OnLeave[]>([])
   const [confirmForms, setConfirmForms] = useState<Record<number, { anomalyType: string; overtimeApproved: boolean }>>({})
   const [overtimeForm, setOvertimeForm] = useState(() => ({
     date: new Date().toLocaleDateString('en-CA'),   // 오늘(YYYY-MM-DD) 기본값
@@ -80,12 +92,14 @@ export default function AttendancePage() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const [t, myOt] = await Promise.all([
+    const [t, myOt, ol] = await Promise.all([
       api.get<Today>('/attendance/me'),
       api.get<{ items: OvertimeRequest[] }>('/attendance/overtime-requests'),
+      api.get<{ items: OnLeave[] }>('/attendance/on-leave'),
     ])
     setToday(t.data)
     setOvertimeMine(myOt.data.items)
+    setOnLeaveList(ol.data.items)
     if (isManagerUp) {
       const [a, ot] = await Promise.all([
         api.get<{ items: Anomaly[] }>('/attendance/anomalies'),
@@ -176,7 +190,10 @@ export default function AttendancePage() {
 
   const clockedIn = !!today?.clockInAt
   const clockedOut = !!today?.clockOutAt
-  const nextAction = !clockedIn ? '출근 가능' : clockedOut ? '오늘 근태 기록 완료' : '퇴근 가능'
+  const onLeaveToday = today?.status === 'LEAVE'
+  const nextAction = onLeaveToday
+    ? '오늘 휴가'
+    : !clockedIn ? '출근 가능' : clockedOut ? '오늘 근태 기록 완료' : '퇴근 가능'
   const currentTime = now.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' })
   const pendingOvertime = overtimeMine.filter((item) => item.status === 'PENDING').length
   const approvedOvertime = overtimeMine.filter((item) => item.status === 'APPROVED').length
@@ -190,7 +207,7 @@ export default function AttendancePage() {
             <h1>{isManagerUp ? '근태관리' : '내 근태'}</h1>
             <p>Asia/Seoul 기준으로 출퇴근, 시간외 신청, 이상 확정 상태를 한 화면에서 확인합니다.</p>
             <div className="hero-actions">
-              <button className="btn-primary" disabled={busy || clockedIn} onClick={() => clock('clock-in')}>출근 기록</button>
+              <button className="btn-primary" disabled={busy || clockedIn || onLeaveToday} onClick={() => clock('clock-in')}>출근 기록</button>
               <button className="btn-ghost" disabled={busy || !clockedIn || clockedOut} onClick={() => clock('clock-out')}>퇴근 기록</button>
             </div>
           </div>
@@ -206,8 +223,8 @@ export default function AttendancePage() {
         <section className="metric-grid">
           <article className={`metric-card tone-${statusTone(today?.status)}`}>
             <span className="metric-label">오늘 상태</span>
-            <strong className="metric-value">{today?.status === 'ANOMALY' ? '이상' : clockedOut ? '완료' : clockedIn ? '근무 중' : '대기'}</strong>
-            <span className="metric-hint">다음 액션: {nextAction}</span>
+            <strong className="metric-value">{onLeaveToday ? '휴가' : today?.status === 'ANOMALY' ? '이상' : clockedOut ? '완료' : clockedIn ? '근무 중' : '대기'}</strong>
+            <span className="metric-hint">{onLeaveToday ? '오늘 승인 휴가' : `다음 액션: ${nextAction}`}</span>
           </article>
           <article className="metric-card tone-blue">
             <span className="metric-label">출근</span>
@@ -230,6 +247,30 @@ export default function AttendancePage() {
               <strong className="metric-value">{anomalies.length}</strong>
               <span className="metric-hint">확정 필요 항목</span>
             </article>
+          )}
+        </section>
+
+        <section className="card-block service-panel" data-testid="on-leave-today">
+          <div className="panel-heading">
+            <div>
+              <h2>오늘 휴가</h2>
+              <p>오늘 승인 휴가로 부재 중인 직원입니다{isManagerUp ? '' : ' (같은 팀 기준)'}.</p>
+            </div>
+            <span className="count-chip">{onLeaveList.length}명</span>
+          </div>
+          {onLeaveList.length === 0 ? (
+            <div className="empty-state">오늘 휴가 중인 직원이 없습니다.</div>
+          ) : (
+            <div className="leave-today-list">
+              {onLeaveList.map((p) => (
+                <div key={p.userId} className="leave-today-item">
+                  <span className="status-dot info" />
+                  <strong>{p.userName}</strong>
+                  <span className="muted small">{p.departmentName ?? '미배정'}</span>
+                  <span className="leave-today-range">{p.startDate}{p.endDate !== p.startDate ? ` ~ ${p.endDate}` : ''}</span>
+                </div>
+              ))}
+            </div>
           )}
         </section>
 
@@ -309,7 +350,7 @@ export default function AttendancePage() {
               <div className="table-shell">
                 <table className="data-table">
                   <thead>
-                    <tr><th>직원</th><th>일자</th><th>유형</th><th>시간외 인정</th><th>상태</th><th>처리</th></tr>
+                    <tr><th>직원</th><th>팀</th><th>일자</th><th>유형</th><th>시간외 인정</th><th>상태</th><th>처리</th></tr>
                   </thead>
                   <tbody>
                     {anomalies.map((a) => {
@@ -317,6 +358,7 @@ export default function AttendancePage() {
                       return (
                         <tr key={a.id}>
                           <td><strong>{a.userName}</strong></td>
+                          <td className="muted small">{a.departmentName ?? '미배정'}</td>
                           <td>{a.date}</td>
                           <td>
                             <select
@@ -381,7 +423,10 @@ export default function AttendancePage() {
                   <tbody>
                     {overtimeInbox.map((r) => (
                       <tr key={r.id}>
-                        <td>{r.userName ?? `사번 ${r.userId}`}</td>
+                        <td>
+                          <strong>{r.userName ?? `사번 ${r.userId}`}</strong>
+                          <div className="muted small">{r.userDepartment ?? '미배정'}</div>
+                        </td>
                         <td>{fmtTime(r.expectedStartAt)} ~ {fmtTime(r.expectedEndAt)}</td>
                         <td>{r.reason}</td>
                         <td><ApproverCell status={r.status} approver={r.approver} /></td>

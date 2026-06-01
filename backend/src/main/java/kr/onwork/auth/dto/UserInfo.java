@@ -18,7 +18,7 @@ public record UserInfo(
                 user.getName(),
                 user.getEmail(),
                 user.getRole().name(),
-                user.getPosition(),
+                user.displayPosition(),
                 dept
         );
     }

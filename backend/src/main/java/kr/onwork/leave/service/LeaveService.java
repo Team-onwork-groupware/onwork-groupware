@@ -169,12 +169,16 @@ public class LeaveService {
         if (mine.isEmpty()) {
             return List.of();
         }
-        Map<Long, String> nameById = userRepository.findAllById(
-                        mine.stream().map(LeaveRequest::getUserId).distinct().toList()).stream()
+        List<User> users = userRepository.findAllById(
+                mine.stream().map(LeaveRequest::getUserId).distinct().toList());
+        Map<Long, String> nameById = users.stream()
                 .collect(Collectors.toMap(User::getId, User::getName));
+        Map<Long, String> deptById = users.stream()
+                .collect(Collectors.toMap(User::getId,
+                        u -> u.getDepartment() != null ? u.getDepartment().getName() : "미배정"));
         return mine.stream()
                 .map(r -> LeaveRequestResponse.of(r, nameById.getOrDefault(r.getUserId(), "?"),
-                        buildLeaveApprover(r)))
+                        deptById.getOrDefault(r.getUserId(), "미배정"), buildLeaveApprover(r)))
                 .toList();
     }
 

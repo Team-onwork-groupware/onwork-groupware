@@ -7,6 +7,7 @@ interface ApprovalItem {
   refId: number
   title: string
   requesterName: string
+  requesterDepartment?: string | null
   summary: string
   ageDays: number
   urgent: boolean
@@ -258,7 +259,10 @@ export default function ApprovalsPage() {
                         />
                       </td>
                       <td><span className={`type-chip ${typeTone(it.type)}`}>{TYPE_LABEL[it.type] ?? it.type}</span></td>
-                      <td><strong>{it.requesterName}</strong></td>
+                      <td>
+                        <strong>{it.requesterName}</strong>
+                        <div className="muted small">{it.requesterDepartment ?? '미배정'}</div>
+                      </td>
                       <td>{it.title} · <span className="muted small">{it.summary}</span></td>
                       <td>{ageBadge(it.ageDays, it.urgent)}</td>
                     </tr>
@@ -282,7 +286,7 @@ export default function ApprovalsPage() {
             </div>
             <dl className="detail-list">
               <div><dt>유형</dt><dd>{TYPE_LABEL[detail.type] ?? detail.type}</dd></div>
-              <div><dt>요청자</dt><dd>{detail.requesterName}</dd></div>
+              <div><dt>요청자</dt><dd>{detail.requesterName}{detail.requesterDepartment ? ` · ${detail.requesterDepartment}` : ''}</dd></div>
               <div><dt>업무 ID</dt><dd>{detail.refId}</dd></div>
               <div><dt>대기일</dt><dd>{detail.ageDays}일{detail.urgent ? ' · 긴급' : ''}</dd></div>
               <div className="detail-wide"><dt>요청 원문</dt><dd>{detail.title}</dd></div>

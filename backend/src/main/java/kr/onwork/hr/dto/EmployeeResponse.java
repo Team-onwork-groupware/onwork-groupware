@@ -27,7 +27,7 @@ public record EmployeeResponse(
                 u.getName(),
                 u.getEmail(),
                 u.getRole().name(),
-                u.getPosition(),
+                u.displayPosition(),
                 u.getStatus().name(),
                 deptName,
                 deptId,

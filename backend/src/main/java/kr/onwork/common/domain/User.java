@@ -80,6 +80,26 @@ public class User {
         return status == UserStatus.RESIGNED;
     }
 
+    /** 부서장 여부 — 소속 부서의 관리자(managerId)가 본인이면 팀장. */
+    public boolean isDepartmentManager() {
+        return department != null && id != null && id.equals(department.getManagerId());
+    }
+
+    /**
+     * 화면 표시용 직급 — 직급(position)을 사원/팀장으로 통일.
+     * 경영진은 직함(대표이사/부대표이사), 부서장은 팀장, 그 외 직원은 사원.
+     * (직급 원본 컬럼은 유지하되, 표시는 권한·부서장 여부로 파생.)
+     */
+    public String displayPosition() {
+        if (role == Role.CEO) {
+            return "대표이사";
+        }
+        if (role == Role.VP) {
+            return "부대표이사";
+        }
+        return isDepartmentManager() ? "팀장" : "사원";
+    }
+
     /** 신규 입사자 생성 (UC-HR-01 승인 시점). */
     public static User createForHire(Department department, WorkGroup workGroup, String employeeNo,
                                      String name, String email, Role role, String position,
